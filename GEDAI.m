@@ -340,7 +340,7 @@ if total_epochs > 0
 else
     percentage_rejected = 0;
 end
-disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) '% (' num2str(num_rejected) ' out of ' num2str(total_epochs) ' epochs)']);
+disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(total_epochs) ' epochs)']);
 
 disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds' newline]);
 % Generate command history
