@@ -4,11 +4,11 @@
 %   GEDAI (Generalized Eigenvalue Deartifacting Instrument)
 %
 % Usage:
-% Example 1: Using all default values
+% Example 1: Using all default values (and no bad epoch rejection)
 %    >>  [EEG] = GEDAI(EEG);
 %
 % Example 2: Defining some parameters
-%    >>  [EEG] = GEDAI(EEG, 'auto', 12, 0.5, 'precomputed', true, false);
+%    >>  [EEG] = GEDAI(EEG, 'auto', 12, 0.5, 'precomputed', true, false, 0.9);
 %
 % Example 3: Using a "custom" [channel x channel] reference matrix 
 %    >>  [EEG] = GEDAI(EEG, 'auto', 12, 0.5, your_refCOV);
@@ -49,6 +49,11 @@
 % 
 %   visualize_artifacts         - Boolean for artifact visualization 
 %                                 using vis_artifacts function from the ASR toolbox
+%
+%   ENOVA_threshold             - Threshold for rejecting epochs based on Explained
+%                                 Noise Variance (ENOVA). Epochs with ENOVA >
+%                                 ENOVA_threshold will be removed. Default is inf
+%                                 (no rejection).
 %    
 % Outputs:
 % 
@@ -66,6 +71,11 @@
 %                                  frequency band, starting with the broadband
 %                                  approx: [broadband gamma beta alpha theta delta etc.]
 %
+%   mean_ENOVA              - Mean Explained Noise Variance (ENOVA) across all epochs.
+%                             ENOVA is the variance of the removed noise, expressed as a 
+%                             proportion of the variance of the original EEG data.
+%
+%   ENOVA_per_epoch         - Vector of ENOVA values for each epoch.
 % 
 %   com                     - output logging to EEG.history
 
