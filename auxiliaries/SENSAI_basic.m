@@ -11,7 +11,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [SENSAI_score, SIGNAL_subspace_similarity, NOISE_subspace_similarity] = SENSAI_basic(signal_data, noise_data, srate, epoch_size, refCOV, NOISE_multiplier)
+function [SENSAI_score, SIGNAL_subspace_similarity, NOISE_subspace_similarity, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(signal_data, noise_data, srate, epoch_size, refCOV, NOISE_multiplier)
 
     %   Calculates the Signal & Noise Subspace Alignment Index (SENSAI) from raw EEG data
     
@@ -41,6 +41,7 @@ noise_EEG_epoched = reshape(noise_data, num_chans, epoch_samples, []);
 num_epochs = size(signal_EEG_epoched, 3);
 SIGNAL_subspace_similarity_distribution = zeros(1, num_epochs);
 NOISE_subspace_similarity_distribution = zeros(1, num_epochs);
+ENOVA_per_epoch = zeros(1, num_epochs);
 for epoch = 1:num_epochs
     % SIGNAL SUBSPACE
     cov_signal_EEG = cov(signal_EEG_epoched(:,:,epoch)');
@@ -56,7 +57,14 @@ for epoch = 1:num_epochs
     evecs_noise = evecs_noise(:, sidxS_noise(1:top_PCs));
     NOISE_subspace_angles = subspace_angles(evecs_noise, evecs_Template_cov);
     NOISE_subspace_similarity_distribution(epoch) = prod(cos(NOISE_subspace_angles));
+
+    % Explained Noise Variance (ENOVA)
+    original_epoch = signal_EEG_epoched(:,:,epoch) + noise_EEG_epoched(:,:,epoch);
+    var_original = var(original_epoch(:));
+    var_noise = var(reshape(noise_EEG_epoched(:,:,epoch), [], 1));
+    ENOVA_per_epoch(epoch) = var_noise / var_original;
 end
+mean_ENOVA = mean(ENOVA_per_epoch);
 SIGNAL_subspace_similarity = 100 * mean(SIGNAL_subspace_similarity_distribution);
 NOISE_subspace_similarity = 100 * mean(NOISE_subspace_similarity_distribution);
 SENSAI_score = SIGNAL_subspace_similarity - NOISE_multiplier * NOISE_subspace_similarity;

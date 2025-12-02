@@ -20,6 +20,7 @@ function [EEG, com] = pop_GEDAI(EEG, varargin)
 artifact_threshold = 'auto';
 epoch_size_in_cycles = 12;
 lowcut_frequency = 0.5;
+ENOVA_threshold = 0.9;
 
 % Create an inputParser to handle varargin
 p = inputParser;
@@ -34,12 +35,13 @@ uilist = { ...
     {'style' 'text' 'string' 'Leadfield matrix'}    {'style' 'popupmenu' 'string' '          precomputed|          interpolated'} ...
     {'style' 'text' 'string' 'Epoch size (wave cycles)'} {'style' 'edit' 'string' num2str(epoch_size_in_cycles)} ...
     {'style' 'text' 'string' 'Low-cut frequency (Hz)'} {'style' 'edit' 'string' num2str(lowcut_frequency)} ...
+    {'style' 'text' 'string' 'ENOVA threshold'} {'style' 'edit' 'string' num2str(ENOVA_threshold)} ...
     { 'style' 'text' 'string' 'Parallel processing' }, ...
     {'style' 'checkbox' 'string' ' requires more RAM' 'tag' 'parallel_processing' 'Value' 1}, ...
     { 'style' 'text' 'string' 'Artifact visualization' }, ...
     {'style' 'checkbox' 'string' ' vis_artifacts from ASR' 'tag' 'visualization_A' 'Value' 1}, ...
 };
-geometry = { [1, 1] [1, 1] [1, 1] [1, 1] [1, 1] [1, 1]};
+geometry = { [1, 1] [1, 1] [1, 1] [1, 1] [1, 1] [1, 1] [1, 1]};
 title = '  GEDAI denoising |  v1.2  ';
 
 % Get user input
@@ -53,12 +55,13 @@ ref_matrix_cell = {'precomputed', 'interpolated'};
 ref_matrix_type = ref_matrix_cell{userInput{2}};
 epoch_size_in_cycles = str2double(userInput{3});
 lowcut_frequency = str2double(userInput{4});
+ENOVA_threshold = str2double(userInput{5});
 
 use_parallel = logical(out.parallel_processing);
 visualize_artifacts = logical(out.visualization_A);
 
-
-        [EEG, ~, ~,~, ~, com] = GEDAI(EEG,artifact_threshold,epoch_size_in_cycles, lowcut_frequency,ref_matrix_type,use_parallel,visualize_artifacts);
+disp(['Calling GEDAI function at: ' which('GEDAI')]);
+        [EEG, ~, ~, ~, ~, ~, ~, com] = GEDAI(EEG,artifact_threshold,epoch_size_in_cycles, lowcut_frequency,ref_matrix_type,use_parallel,visualize_artifacts, ENOVA_threshold);
   
         EEG = eegh(com, EEG); % update EEG.history
     

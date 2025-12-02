@@ -82,7 +82,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts)
+function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold)
 
 if nargin < 2 || isempty(artifact_threshold_type)
     artifact_threshold_type = 'auto';
@@ -101,6 +101,9 @@ if nargin < 6 || isempty(parallel)
 end
 if nargin < 7 || isempty(visualize_artifacts)
     visualize_artifacts = false;
+end
+if nargin < 8 || isempty(ENOVA_threshold)
+    ENOVA_threshold = 0.9;
 end
 
 p = fileparts(which('GEDAI'));
@@ -308,19 +311,53 @@ EEGartifacts = EEGclean;
 EEGartifacts.data = EEGavRef.data(:, 1:size(EEGclean.data, 2)) - EEGclean.data;
 % Calculate composite SENSAI score
 noise_multiplier = 1;
-[SENSAI_score] = SENSAI_basic(double(EEGclean.data), double(EEGartifacts.data), EEGavRef.srate, broadband_epoch_size, refCOV, noise_multiplier);
+[SENSAI_score, ~, ~, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(double(EEGclean.data), double(EEGartifacts.data), EEGavRef.srate, broadband_epoch_size, refCOV, noise_multiplier);
+
+epochs_to_remove = find(ENOVA_per_epoch > ENOVA_threshold);
+regions = [];
+if ~isempty(epochs_to_remove)
+    epoch_samples = round(broadband_epoch_size * EEGavRef.srate);
+    for i = 1:length(epochs_to_remove)
+        epoch = epochs_to_remove(i);
+        start_sample = (epoch - 1) * epoch_samples + 1;
+        end_sample = epoch * epoch_samples;
+        if end_sample > size(EEGclean.data, 2)
+            end_sample = size(EEGclean.data, 2);
+        end
+        regions = [regions; start_sample end_sample];
+    end
+end
+
 tEnd = toc(tStart);
 disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
+disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
 disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds']);
 % Generate command history
 if ~ischar(ref_matrix_type)
     ref_matrix_type = 'custom';
 end
-com = sprintf('EEG = GEDAI(EEG, ''artifact_threshold'', ''%s'', ''epoch_size_in_cycles'', %s, ''lowcut_frequency'', %s, ''ref_matrix_type'', ''%s'', ''parallel_processing'', %d, ''visualization_A'', %d);', ...
-    artifact_threshold_type, num2str(epoch_size_in_cycles), num2str(lowcut_frequency), ref_matrix_type, parallel, visualize_artifacts);
+com = sprintf('EEG = GEDAI(EEG, ''artifact_threshold'', ''%s'', ''epoch_size_in_cycles'', %s, ''lowcut_frequency'', %s, ''ref_matrix_type'', ''%s'', ''parallel_processing'', %d, ''visualization_A'', %d, ''ENOVA_threshold'', %s);', ...
+    artifact_threshold_type, num2str(epoch_size_in_cycles), num2str(lowcut_frequency), ref_matrix_type, parallel, visualize_artifacts, num2str(ENOVA_threshold));
+
 if visualize_artifacts
-    vis_artifacts(EEGclean, EEGavRef, 'ScaleBy', 'noscale', 'YScaling', 3*mad(EEGavRef.data(:)), 'show_removed_portions', false);
+    EEGclean_for_vis = EEGclean;
+    if ~isempty(regions)
+        clean_sample_mask = true(1, EEGclean_for_vis.pnts);
+        for i = 1:size(regions, 1)
+            clean_sample_mask(regions(i,1):regions(i,2)) = false;
+        end
+        EEGclean_for_vis.etc.clean_sample_mask = clean_sample_mask;
+        EEGclean_for_vis.data = EEGclean_for_vis.data(:, clean_sample_mask);
+        EEGclean_for_vis.pnts = size(EEGclean_for_vis.data, 2);
+    end
+    vis_artifacts(EEGclean_for_vis, EEGavRef, 'ScaleBy', 'noscale', 'YScaling', 3*mad(EEGavRef.data(:)));
 end
+
+if ~isempty(regions)
+    EEGclean = eeg_eegrej(EEGclean, regions);
+    EEGartifacts = eeg_eegrej(EEGartifacts, regions);
+end
+
 % Add command history to EEGLAB structure
 if exist('eegh', 'file')
     EEGclean = eegh(com, EEGclean);
