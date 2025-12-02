@@ -103,7 +103,7 @@ if nargin < 7 || isempty(visualize_artifacts)
     visualize_artifacts = false;
 end
 if nargin < 8 || isempty(ENOVA_threshold)
-    ENOVA_threshold = 0.9;
+    ENOVA_threshold = inf; % If empty, set to infinity to disable rejection
 end
 
 p = fileparts(which('GEDAI'));
@@ -317,6 +317,7 @@ epochs_to_remove = find(ENOVA_per_epoch > ENOVA_threshold);
 regions = [];
 if ~isempty(epochs_to_remove)
     epoch_samples = round(broadband_epoch_size * EEGavRef.srate);
+    regions = zeros(length(epochs_to_remove), 2);
     for i = 1:length(epochs_to_remove)
         epoch = epochs_to_remove(i);
         start_sample = (epoch - 1) * epoch_samples + 1;
@@ -324,14 +325,24 @@ if ~isempty(epochs_to_remove)
         if end_sample > size(EEGclean.data, 2)
             end_sample = size(EEGclean.data, 2);
         end
-        regions = [regions; start_sample end_sample];
+        regions(i,:) = [start_sample end_sample];
     end
 end
 
 tEnd = toc(tStart);
 disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
 disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
-disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds']);
+
+total_epochs = length(ENOVA_per_epoch);
+num_rejected = length(epochs_to_remove);
+if total_epochs > 0
+    percentage_rejected = (num_rejected / total_epochs) * 100;
+else
+    percentage_rejected = 0;
+end
+disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) '% (' num2str(num_rejected) ' out of ' num2str(total_epochs) ' epochs)']);
+
+disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds' newline]);
 % Generate command history
 if ~ischar(ref_matrix_type)
     ref_matrix_type = 'custom';
