@@ -319,6 +319,7 @@ EEGclean.data = squeeze(sum(wavelet_band_filtered_data, 1));
 % Create artifact structure
 EEGartifacts = EEGclean;
 EEGartifacts.data = EEGavRef.data(:, 1:size(EEGclean.data, 2)) - EEGclean.data;
+
 % Calculate composite SENSAI score
 noise_multiplier = 1;
 [SENSAI_score, ~, ~, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(double(EEGclean.data), double(EEGartifacts.data), EEGavRef.srate, broadband_epoch_size, refCOV, noise_multiplier);
@@ -340,19 +341,8 @@ if ~isempty(epochs_to_remove)
 end
 
 tEnd = toc(tStart);
-disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
-disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
 
-total_epochs = length(ENOVA_per_epoch);
-num_rejected = length(epochs_to_remove);
-if total_epochs > 0
-    percentage_rejected = (num_rejected / total_epochs) * 100;
-else
-    percentage_rejected = 0;
-end
-disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(total_epochs) ' epochs)']);
 
-disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds' newline]);
 % Generate command history
 if ~ischar(ref_matrix_type)
     ref_matrix_type = 'custom';
@@ -375,9 +365,27 @@ if visualize_artifacts
 end
 
 if ~isempty(regions)
+    disp([newline 'Removing bad epochs...']);
     EEGclean = eeg_eegrej(EEGclean, regions);
     EEGartifacts = eeg_eegrej(EEGartifacts, regions);
 end
+
+% Calculate final SENSAI score (after potential epoch rejection)
+[SENSAI_score, ~, ~, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(double(EEGclean.data), double(EEGartifacts.data), EEGavRef.srate, broadband_epoch_size, refCOV, noise_multiplier);
+
+disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
+disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
+
+total_epochs = length(ENOVA_per_epoch);
+num_rejected = length(epochs_to_remove);
+if total_epochs > 0
+    percentage_rejected = (num_rejected / total_epochs) * 100;
+else
+    percentage_rejected = 0;
+end
+disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(total_epochs) ' epochs)']);
+
+disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds' newline]);
 
 % Add command history to EEGLAB structure
 if exist('eegh', 'file')
