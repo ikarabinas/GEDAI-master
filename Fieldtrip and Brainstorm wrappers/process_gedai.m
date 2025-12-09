@@ -71,11 +71,22 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.visualize_artifacts.Comment = 'Visualize artifacts';
     sProcess.options.visualize_artifacts.Type    = 'checkbox';
     sProcess.options.visualize_artifacts.Value   = 0;
+    sProcess.isSeparator = 1;
+
+    % === ENOVA bad epoch rejection
+    sProcess.options.label4.Comment = '<B>ENOVA bad epoch rejection</B>';
+    sProcess.options.label4.Type    = 'label';
+    sProcess.options.reject_by_enova.Comment = 'Enable';
+    sProcess.options.reject_by_enova.Type    = 'checkbox';
+    sProcess.options.reject_by_enova.Value   = 0;
+    sProcess.options.enova_threshold.Comment = 'ENOVA Threshold (0-1)';
+    sProcess.options.enova_threshold.Type    = 'value';
+    sProcess.options.enova_threshold.Value   = {0.9, '', 2};
 end
 
 
 %% ===== GET OPTIONS =====
-function [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts] = GetOptions(sProcess)
+function [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, enova_threshold] = GetOptions(sProcess)
     % Artifact threshold type
     artifact_threshold_type = sProcess.options.artifact_threshold_type.Value;
     % Epoch size in cycles
@@ -95,20 +106,29 @@ function [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_m
     parallel = sProcess.options.parallel.Value;
     % Visualize artifacts
     visualize_artifacts = sProcess.options.visualize_artifacts.Value;
+    % ENOVA bad epoch rejection
+    if sProcess.options.reject_by_enova.Value
+        enova_threshold = sProcess.options.enova_threshold.Value{1};
+    else
+        enova_threshold = [];
+    end
 end
 
 
 %% ===== FORMAT COMMENT =====
 function Comment = FormatComment(sProcess) %#ok<DEFNU>
-    [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type] = GetOptions(sProcess);
+    [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, ~, ~, enova_threshold] = GetOptions(sProcess);
     Comment = ['GEDAI: ' artifact_threshold_type ', ' num2str(epoch_size_in_cycles) ' cycles, ' num2str(lowcut_frequency) ' Hz, ' ref_matrix_type];
+    if ~isempty(enova_threshold)
+        Comment = [Comment, ', ENOVA=' num2str(enova_threshold)];
+    end
 end
 
 
 %% ===== RUN =====
 function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     % Get options
-    [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts] = GetOptions(sProcess);
+    [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, enova_threshold] = GetOptions(sProcess);
     
     % Get channel file for study
     [sChannel, iStudyChannel] = bst_get('ChannelForStudy', sInput.iStudy);
@@ -138,7 +158,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     end
 
     % Run GEDAI
-    EEGclean = GEDAI(EEG, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param, parallel, visualize_artifacts);
+    EEGclean = GEDAI(EEG, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param, parallel, visualize_artifacts, enova_threshold);
     
     % Convert back to Brainstorm format
     sInput = eeglab2brainstorm(EEGclean, sInput);

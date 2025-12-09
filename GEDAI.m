@@ -366,8 +366,36 @@ end
 
 if ~isempty(regions)
     disp([newline 'Removing bad epochs...']);
-    EEGclean = eeg_eegrej(EEGclean, regions);
-    EEGartifacts = eeg_eegrej(EEGartifacts, regions);
+    
+    % Manual implementation of eeg_eegrej to avoid eeg_checkset issues
+    samples_to_keep = true(1, EEGclean.pnts);
+    for i = 1:size(regions, 1)
+        start_idx = round(regions(i,1));
+        end_idx = round(regions(i,2));
+        if start_idx > 0 && end_idx <= EEGclean.pnts
+            samples_to_keep(start_idx:end_idx) = false;
+        end
+    end
+
+    % Apply mask to EEGclean
+    EEGclean.data = EEGclean.data(:, samples_to_keep);
+    EEGclean.pnts = size(EEGclean.data, 2);
+    EEGclean.xmax = EEGclean.xmin + (EEGclean.pnts-1)/EEGclean.srate;
+    if EEGclean.pnts > 1
+        EEGclean.times = linspace(EEGclean.xmin*1000, EEGclean.xmax*1000, EEGclean.pnts);
+    else
+        EEGclean.times = EEGclean.xmin*1000;
+    end
+    
+    % Apply mask to EEGartifacts
+    EEGartifacts.data = EEGartifacts.data(:, samples_to_keep);
+    EEGartifacts.pnts = size(EEGartifacts.data, 2);
+    EEGartifacts.xmax = EEGartifacts.xmin + (EEGartifacts.pnts-1)/EEGartifacts.srate;
+    if EEGartifacts.pnts > 1
+        EEGartifacts.times = linspace(EEGartifacts.xmin*1000, EEGartifacts.xmax*1000, EEGartifacts.pnts);
+    else
+        EEGartifacts.times = EEGartifacts.xmin*1000;
+    end
 end
 
 % Calculate final SENSAI score (after potential epoch rejection)
