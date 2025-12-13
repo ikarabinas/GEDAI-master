@@ -17,8 +17,8 @@ function [cleaned_data, artifacts_data, artifact_threshold_out] = clean_EEG(EEGd
 % --- PRE-ALLOCATION ---
 num_chans = size(Eval, 1);
 num_epochs = size(Eval, 3);
-% Pre-allocate the array to its full size with the correct complex type.
-all_diagonals = complex(zeros(num_chans * num_epochs, 1));
+% Pre-allocate the array 
+all_diagonals = zeros(num_chans * num_epochs, 1);
 for i = 1:num_epochs
     start_idx = (i-1) * num_chans + 1;
     end_idx = i * num_chans;
@@ -45,8 +45,8 @@ Treshold1 = T1 * min(outliers);
 
 %% Cleaning EEG by removing outlying GEVD components
 epoch_samples = srate * epoch_size;
-artifacts = complex(zeros(size(EEGdata_epoched)));
-cleaned_epoched_data = complex(zeros(size(EEGdata_epoched)));
+artifacts = zeros(size(EEGdata_epoched));
+cleaned_epoched_data = zeros(size(EEGdata_epoched));
 if nargin < 8 || isempty(cosine_weights)
     cosine_weights = create_cosine_weights(num_chans, srate, epoch_size, 1);
 end
@@ -82,8 +82,8 @@ for i = 1:num_epochs
 end
 
 % Reshape data back to continuous form and return outputs
-cleaned_data = real(reshape(cleaned_epoched_data, num_chans, []));
-artifacts_data = real(reshape(artifacts, num_chans, []));
+cleaned_data = reshape(cleaned_epoched_data, num_chans, []);
+artifacts_data = reshape(artifacts, num_chans, []);
 artifact_threshold_out = artifact_threshold_in;
 
 end
