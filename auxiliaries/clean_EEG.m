@@ -53,17 +53,18 @@ end
 half_epoch = epoch_samples/2;
 
 for i = 1:num_epochs
-
     component_spatial_filter = Evec(:,:,i);
     
-    for j = 1:num_chans
-        if abs(Eval(j,j,i)) < exp(Treshold1 - 100)
-            component_spatial_filter(:,j) = 0;
-        end
-    end
+    % --- OPTIMIZATION START ---
+    % 1. Create a logical mask of indices to zero out
+    % This replaces the entire 'for j' loop with one line
+    bad_indices = abs(diag(Eval(:,:,i))) < exp(Treshold1 - 100);
     
-    artifacts_timecourses = component_spatial_filter' * EEGdata_epoched(:,:,i);
-    
+    % 2. Apply the mask (Vectorized)
+    component_spatial_filter(:, bad_indices) = 0;
+    % --- OPTIMIZATION END ---
+
+    artifacts_timecourses = component_spatial_filter' * EEGdata_epoched(:,:,i);    
     Signal_to_remove = Evec(:,:,i)' \ artifacts_timecourses;
     
     artifacts(:, :, i) = Signal_to_remove;
