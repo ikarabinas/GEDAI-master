@@ -170,8 +170,45 @@ number_of_wavelet_levels = 3;
 wavelet_type = 'haar';
 
 % Decompose the signal
-wpt_hp = modwt(EEGavRef.data', wavelet_type, number_of_wavelet_levels);
-mra_hp = modwtmra(wpt_hp, wavelet_type); % bands x samples x channels
+% Robust execution order: GPU(Double) -> GPU(Single) -> CPU(Double) -> CPU(Single)
+success = false;
+
+% Attempt GPU Processing
+if gpuDeviceCount > 0
+    try
+        disp('Attempting GPU processing (Double Precision)...');
+        data_gpu = gpuArray(EEGavRef.data');
+        wpt_hp = modwt(data_gpu, wavelet_type, number_of_wavelet_levels);
+        mra_hp = gather(modwtmra(wpt_hp, wavelet_type)); 
+        clear data_gpu wpt_hp;
+        success = true;
+    catch 
+        warning('GPU (Double) failed: %s. Attempting GPU (Single Precision)...');
+        try
+            data_gpu = gpuArray(single(EEGavRef.data'));
+            wpt_hp = modwt(data_gpu, wavelet_type, number_of_wavelet_levels);
+            mra_hp = gather(modwtmra(wpt_hp, wavelet_type)); 
+            clear data_gpu wpt_hp;
+            success = true;
+        catch 
+            warning('GPU (Single) failed: %s. Falling back to CPU.');
+        end
+    end
+end
+
+% Fallback to CPU if GPU failed or unavailable
+if ~success
+    try
+        disp('Attempting CPU processing (Double Precision)...');
+        wpt_hp = modwt(EEGavRef.data', wavelet_type, number_of_wavelet_levels);
+        mra_hp = modwtmra(wpt_hp, wavelet_type);
+    catch 
+        warning('CPU (Double) failed: %s. Attempting CPU (Single Precision)...');
+        % Single precision fallback for OOM
+        wpt_hp = modwt(single(EEGavRef.data'), wavelet_type, number_of_wavelet_levels);
+        mra_hp = modwtmra(wpt_hp, wavelet_type);
+    end
+end
 
 % Identify wavelet bands to remove based on lowcut_frequency
 srate = EEGavRef.srate;
@@ -199,8 +236,39 @@ unfiltered_data = cleaned_broadband_data';
 number_of_wavelet_levels = 3;
 number_of_wavelet_bands = 2^number_of_wavelet_levels + 1;
 wavelet_type = 'haar';
-wpt_EEG = modwt(unfiltered_data, wavelet_type, number_of_wavelet_bands);
-wpt_EEG = modwtmra(wpt_EEG, wavelet_type); % wavelet bands x samples x channels
+% Robust execution order: GPU(Double) -> GPU(Single) -> CPU(Double) -> CPU(Single)
+success_main = false;
+
+if gpuDeviceCount > 0
+    try
+        data_gpu = gpuArray(unfiltered_data);
+        wpt_EEG = modwt(data_gpu, wavelet_type, number_of_wavelet_bands);
+        wpt_EEG = gather(modwtmra(wpt_EEG, wavelet_type)); 
+        clear data_gpu;
+        success_main = true;
+    catch 
+        try
+             data_gpu = gpuArray(single(unfiltered_data));
+             wpt_EEG = modwt(data_gpu, wavelet_type, number_of_wavelet_bands);
+             wpt_EEG = gather(modwtmra(wpt_EEG, wavelet_type));
+             clear data_gpu;
+             success_main = true;
+        catch 
+        end
+    end
+else
+    wpt_EEG = []; 
+end
+
+if ~success_main
+    try
+        wpt_EEG = modwt(unfiltered_data, wavelet_type, number_of_wavelet_bands);
+        wpt_EEG = modwtmra(wpt_EEG, wavelet_type);
+    catch 
+         wpt_EEG = modwt(single(unfiltered_data), wavelet_type, number_of_wavelet_bands);
+         wpt_EEG = modwtmra(wpt_EEG, wavelet_type); 
+    end
+end
 number_of_discrete_wavelet_bands = size(wpt_EEG, 1);
 
 % Pre-calculate center frequencies for each MRA wavelet band
@@ -290,7 +358,13 @@ if parallel
         wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
         
         current_epoch_size = epoch_sizes_per_wavelet_band(f);
-        [cleaned_band_data, ~, temp_sensai, temp_thresh] = GEDAI_per_band(double(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+        try
+             [cleaned_band_data, ~, temp_sensai, temp_thresh] = GEDAI_per_band(wavelet_data_band, srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+        catch ME
+             % If OOM or other memory error, try single precision
+             warning('GEDAI_per_band failed for band %d: %s. Retrying with single precision...', f, ME.message);
+             [cleaned_band_data, ~, temp_sensai, temp_thresh] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+        end
         
         wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
         temp_sensai_scores(f) = temp_sensai;
@@ -305,7 +379,12 @@ else % Non-parallel version
         wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
         
         current_epoch_size = epoch_sizes_per_wavelet_band(f);
-        [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(wavelet_data_band, srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+        try
+            [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(wavelet_data_band, srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+        catch ME
+            warning('GEDAI_per_band failed for band %d: %s. Retrying with single precision...', f, ME.message);
+            [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+        end
         
         wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
         SENSAI_score_per_band(f+1) = sensai_val;

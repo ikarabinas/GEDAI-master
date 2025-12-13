@@ -19,10 +19,15 @@ end
 if ~ismatrix(eeg_data)
     error('Input EEG data must be a 2D matrix (channels x samples).');
 end
-pnts = size(eeg_data, 2);
+% pnts = size(eeg_data, 2); % Redundant
 N_EEG_electrodes = size(eeg_data, 1);
-eeg_data = double(eeg_data);
-refCOV = double(refCOV);
+% eeg_data = double(eeg_data); % REMOVED forced double cast
+if ~isa(eeg_data, 'double') && ~isa(eeg_data, 'single')
+    eeg_data = double(eeg_data); % Only cast if not already float
+end
+
+% Ensure refCOV matches precision of eeg_data
+refCOV = cast(refCOV, 'like', eeg_data);
 %% Pad and Epoch Data
 pnts_original = size(eeg_data, 2); 
 epoch_samples = srate * epoch_size;
@@ -37,16 +42,16 @@ if remainder ~= 0
 end
 
 % Epoch data stream 1
-EEGdata_epoched = double(reshape(eeg_data, N_EEG_electrodes, epoch_samples, []));
+EEGdata_epoched = reshape(eeg_data, N_EEG_electrodes, epoch_samples, []);
 
 % Epoch data stream 2 (shifted by half epoch)
 shifting = epoch_samples / 2; 
 eeg_data_2 = eeg_data(:, (shifting+1):(end-shifting));
-EEGdata_epoched_2 = double(reshape(eeg_data_2, N_EEG_electrodes, epoch_samples, []));
+EEGdata_epoched_2 = reshape(eeg_data_2, N_EEG_electrodes, epoch_samples, []);
 [~,~,N_epochs] = size(EEGdata_epoched);
 %% Calculate Covariance Matrix per Epoch
-COV = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs);
-COV_2 = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs-1);
+COV = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs, 'like', eeg_data);
+COV_2 = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs-1, 'like', eeg_data);
 for epo=1:N_epochs-1
     COV(:,:,epo) = cov(EEGdata_epoched(:,:,epo)');
     COV_2(:,:,epo) = cov(EEGdata_epoched_2(:,:,epo)');
@@ -54,11 +59,11 @@ end
 COV(:,:,N_epochs) = cov(EEGdata_epoched(:,:,N_epochs)');
 %% Generalized Eigendecomposition (GEVD)
 regularization_lambda = 0.05;
-refCOV_reg = (1-regularization_lambda)*refCOV + regularization_lambda*mean(eig(refCOV))*eye(N_EEG_electrodes);
-Evec = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs);
-Eval = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs);
-Evec_2 = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs-1);
-Eval_2 = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs-1);
+refCOV_reg = (1-regularization_lambda)*refCOV + regularization_lambda*mean(eig(refCOV))*eye(N_EEG_electrodes, 'like', refCOV);
+Evec = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs, 'like', eeg_data);
+Eval = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs, 'like', eeg_data);
+Evec_2 = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs-1, 'like', eeg_data);
+Eval_2 = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs-1, 'like', eeg_data);
 for i=1:N_epochs-1
     [Evec(:,:,i), Eval(:,:,i)] = eig(COV(:,:,i), refCOV_reg, 'chol');
     [Evec_2(:,:,i), Eval_2(:,:,i)] = eig(COV_2(:,:,i), refCOV_reg, 'chol');
@@ -120,6 +125,10 @@ cosine_weights = create_cosine_weights(N_EEG_electrodes, srate, epoch_size, 1);
 
 [cleaned_data_1, artifacts_data_1, artifact_threshold_out] = clean_EEG(EEGdata_epoched, srate, epoch_size, artifact_threshold, refCOV, Eval, Evec, cosine_weights);
 [cleaned_data_2, artifacts_data_2, ~] = clean_EEG(EEGdata_epoched_2, srate, epoch_size, artifact_threshold, refCOV, Eval_2, Evec_2, cosine_weights);
+
+% Clear Stream 2 inputs as they are no longer needed
+clear EEGdata_epoched_2 Evec_2 Eval_2 COV_2;
+
 %% Combine the two processed streams using cosine weighting
 % cosine_weights is already calculated
 
@@ -130,11 +139,19 @@ cleaned_data_2(:, 1:shifting) = cleaned_data_2(:, 1:shifting) .* cosine_weights(
 cleaned_data_2(:, sample_end+1:end) = cleaned_data_2(:, sample_end+1:end) .* cosine_weights(:, (shifting+1):end);
 artifacts_data_2(:, 1:shifting) = artifacts_data_2(:, 1:shifting) .* cosine_weights(:, 1:shifting);
 artifacts_data_2(:, sample_end+1:end) = artifacts_data_2(:, sample_end+1:end) .* cosine_weights(:, (shifting+1):end);
-% Combine streams
+
+% Combine streams (Optimize memory by clearing variables)
 cleaned_data = cleaned_data_1;
+clear cleaned_data_1; % Release memory
+
 artifacts_data = artifacts_data_1;
+clear artifacts_data_1; % Release memory
+
 cleaned_data(:, shifting+1:shifting+size_reconstructed_2) = cleaned_data(:, shifting+1:shifting+size_reconstructed_2) + cleaned_data_2;
+clear cleaned_data_2; % Release memory
+
 artifacts_data(:, shifting+1:shifting+size_reconstructed_2) = artifacts_data(:, shifting+1:shifting+size_reconstructed_2) + artifacts_data_2;
+clear artifacts_data_2; % Release memory
 
 % Remove padding to restore original data length
 cleaned_data = cleaned_data(:, 1:pnts_original);
