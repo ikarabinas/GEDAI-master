@@ -11,7 +11,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [cleaned_data, artifacts_data, artifact_threshold_out] = clean_EEG(EEGdata_epoched, srate, epoch_size, artifact_threshold_in, refCOV, Eval, Evec)
+function [cleaned_data, artifacts_data, artifact_threshold_out] = clean_EEG(EEGdata_epoched, srate, epoch_size, artifact_threshold_in, refCOV, Eval, Evec, cosine_weights)
 %   This GEDAI function reconstructs the signal after removing artifactual components
 
 % --- PRE-ALLOCATION ---
@@ -47,7 +47,9 @@ Treshold1 = T1 * min(outliers);
 epoch_samples = srate * epoch_size;
 artifacts = complex(zeros(size(EEGdata_epoched)));
 cleaned_epoched_data = complex(zeros(size(EEGdata_epoched)));
-cosine_weights = create_cosine_weights(num_chans, srate, epoch_size, 1);
+if nargin < 8 || isempty(cosine_weights)
+    cosine_weights = create_cosine_weights(num_chans, srate, epoch_size, 1);
+end
 half_epoch = epoch_samples/2;
 
 for i = 1:num_epochs

@@ -115,10 +115,14 @@ if ischar(artifact_threshold_type) && startsWith(artifact_threshold_type, 'auto'
 else
     artifact_threshold = str2double(artifact_threshold_type);
 end
-[cleaned_data_1, artifacts_data_1, artifact_threshold_out] = clean_EEG(EEGdata_epoched, srate, epoch_size, artifact_threshold, refCOV, Eval, Evec);
-[cleaned_data_2, artifacts_data_2, ~] = clean_EEG(EEGdata_epoched_2, srate, epoch_size, artifact_threshold, refCOV, Eval_2, Evec_2);
-%% Combine the two processed streams using cosine weighting
+% Pre-calculate cosine weights for efficiency
 cosine_weights = create_cosine_weights(N_EEG_electrodes, srate, epoch_size, 1);
+
+[cleaned_data_1, artifacts_data_1, artifact_threshold_out] = clean_EEG(EEGdata_epoched, srate, epoch_size, artifact_threshold, refCOV, Eval, Evec, cosine_weights);
+[cleaned_data_2, artifacts_data_2, ~] = clean_EEG(EEGdata_epoched_2, srate, epoch_size, artifact_threshold, refCOV, Eval_2, Evec_2, cosine_weights);
+%% Combine the two processed streams using cosine weighting
+% cosine_weights is already calculated
+
 size_reconstructed_2 = size(cleaned_data_2, 2);
 sample_end = size_reconstructed_2 - shifting;
 % Apply weights to the second (shifted) stream

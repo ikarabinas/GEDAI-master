@@ -347,7 +347,7 @@ tEnd = toc(tStart);
 if ~ischar(ref_matrix_type)
     ref_matrix_type = 'custom';
 end
-com = sprintf('EEG = GEDAI(EEG, ''artifact_threshold'', ''%s'', ''epoch_size_in_cycles'', %s, ''lowcut_frequency'', %s, ''ref_matrix_type'', ''%s'', ''parallel_processing'', %d, ''visualization_A'', %d, ''ENOVA_threshold'', %s);', ...
+com = sprintf('EEG = GEDAI(EEG, ''%s'', %s,  %s, ''%s'', %d,  %d, %s);', ...
     artifact_threshold_type, num2str(epoch_size_in_cycles), num2str(lowcut_frequency), ref_matrix_type, parallel, visualize_artifacts, num2str(ENOVA_threshold));
 
 if visualize_artifacts
