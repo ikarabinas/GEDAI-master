@@ -127,6 +127,17 @@ end
 
 %% ===== RUN =====
 function sInput = Run(sProcess, sInput) %#ok<DEFNU>
+    % Check if GEDAI plugin is loaded
+    unloadPlug = 0;
+    PlugDesc = bst_plugin('GetDescription', 'gedai');
+    if ~isequal(PlugDesc.isLoaded, 1) || isempty(PlugDesc.Path)
+        [isOk, errMsg] = bst_plugin('Load', 'gedai');
+        if ~isOk
+            bst_report('Error', sProcess, sInput, errMsg);
+            return
+        end
+        unloadPlug = 1;
+    end
     % Get options
     [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, enova_threshold] = GetOptions(sProcess);
     
@@ -165,6 +176,10 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     sInput.CommentTag = FormatComment(sProcess);
     if isfield(sInput, 'Std') && ~isempty(sInput.Std)
         sInput.Std = [];
+    end
+    % Unload GEDAI plugin if loaded by this process
+    if unloadPlug
+        bst_plugin('Unload', 'gedai');
     end
 end
 
