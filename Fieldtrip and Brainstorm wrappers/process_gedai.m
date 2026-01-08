@@ -127,6 +127,17 @@ end
 
 %% ===== RUN =====
 function sInput = Run(sProcess, sInput) %#ok<DEFNU>
+    % Check if GEDAI plugin is loaded
+    unloadPlug = 0;
+    PlugDesc = bst_plugin('GetDescription', 'gedai');
+    if ~isequal(PlugDesc.isLoaded, 1) || isempty(PlugDesc.Path)
+        [isOk, errMsg] = bst_plugin('Load', 'gedai');
+        if ~isOk
+            bst_report('Error', sProcess, sInput, errMsg);
+            return
+        end
+        unloadPlug = 1;
+    end
     % Get options
     [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, enova_threshold] = GetOptions(sProcess);
     
@@ -166,6 +177,10 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     if isfield(sInput, 'Std') && ~isempty(sInput.Std)
         sInput.Std = [];
     end
+    % Unload GEDAI plugin if loaded by this process
+    if unloadPlug
+        bst_plugin('Unload', 'gedai');
+    end
 end
 
 %% ===== HELPER FUNCTIONS =====
@@ -185,7 +200,7 @@ function EEG = brainstorm2eeglab(sInput, ChannelMat)
     EEG.xmin = sInput.TimeVector(1);
     EEG.xmax = sInput.TimeVector(end);
     EEG.times = sInput.TimeVector * 1000; % Convert to ms
-    EEG.data = sInput.A;
+    EEG.data = sInput.A * 1e6;            % Convert to uV
     EEG.etc = [];
     EEG.event = [];
 
@@ -193,9 +208,9 @@ function EEG = brainstorm2eeglab(sInput, ChannelMat)
     for i = 1:length(ChannelMat.Channel)
         EEG.chanlocs(i).labels = ChannelMat.Channel(i).Name;
         if ~isempty(ChannelMat.Channel(i).Loc)
-            EEG.chanlocs(i).X = ChannelMat.Channel(i).Loc(1);
-            EEG.chanlocs(i).Y = ChannelMat.Channel(i).Loc(2);
-            EEG.chanlocs(i).Z = ChannelMat.Channel(i).Loc(3);
+            EEG.chanlocs(i).X = ChannelMat.Channel(i).Loc(1) * 1000; % Convert to mm
+            EEG.chanlocs(i).Y = ChannelMat.Channel(i).Loc(2) * 1000; % Convert to mm
+            EEG.chanlocs(i).Z = ChannelMat.Channel(i).Loc(3) * 1000; % Convert to mm
         end
         EEG.chanlocs(i).type = ChannelMat.Channel(i).Type;
     end
