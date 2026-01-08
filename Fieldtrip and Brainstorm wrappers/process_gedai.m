@@ -200,7 +200,7 @@ function EEG = brainstorm2eeglab(sInput, ChannelMat)
     EEG.xmin = sInput.TimeVector(1);
     EEG.xmax = sInput.TimeVector(end);
     EEG.times = sInput.TimeVector * 1000; % Convert to ms
-    EEG.data = sInput.A;
+    EEG.data = sInput.A * 1e6;            % Convert to uV
     EEG.etc = [];
     EEG.event = [];
 
@@ -208,9 +208,9 @@ function EEG = brainstorm2eeglab(sInput, ChannelMat)
     for i = 1:length(ChannelMat.Channel)
         EEG.chanlocs(i).labels = ChannelMat.Channel(i).Name;
         if ~isempty(ChannelMat.Channel(i).Loc)
-            EEG.chanlocs(i).X = ChannelMat.Channel(i).Loc(1);
-            EEG.chanlocs(i).Y = ChannelMat.Channel(i).Loc(2);
-            EEG.chanlocs(i).Z = ChannelMat.Channel(i).Loc(3);
+            EEG.chanlocs(i).X = ChannelMat.Channel(i).Loc(1) * 1000; % Convert to mm
+            EEG.chanlocs(i).Y = ChannelMat.Channel(i).Loc(2) * 1000; % Convert to mm
+            EEG.chanlocs(i).Z = ChannelMat.Channel(i).Loc(3) * 1000; % Convert to mm
         end
         EEG.chanlocs(i).type = ChannelMat.Channel(i).Type;
     end
