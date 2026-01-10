@@ -178,16 +178,16 @@ if gpuDeviceCount > 0
     try
         disp('Attempting GPU processing (Double Precision)...');
         data_gpu = gpuArray(EEGavRef.data');
-        wpt_hp = modwt(data_gpu, wavelet_type, number_of_wavelet_levels);
-        mra_hp = gather(modwtmra(wpt_hp, wavelet_type)); 
+        wpt_hp = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_levels);
+        mra_hp = gather(modwtmra_custom(wpt_hp, wavelet_type)); 
         clear data_gpu wpt_hp;
         success = true;
     catch 
         warning('GPU (Double) failed: %s. Attempting GPU (Single Precision)...');
         try
             data_gpu = gpuArray(single(EEGavRef.data'));
-            wpt_hp = modwt(data_gpu, wavelet_type, number_of_wavelet_levels);
-            mra_hp = gather(modwtmra(wpt_hp, wavelet_type)); 
+            wpt_hp = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_levels);
+            mra_hp = gather(modwtmra_custom(wpt_hp, wavelet_type)); 
             clear data_gpu wpt_hp;
             success = true;
         catch 
@@ -200,13 +200,13 @@ end
 if ~success
     try
         disp('Attempting CPU processing (Double Precision)...');
-        wpt_hp = modwt(EEGavRef.data', wavelet_type, number_of_wavelet_levels);
-        mra_hp = modwtmra(wpt_hp, wavelet_type);
+        wpt_hp = modwt_custom(EEGavRef.data', wavelet_type, number_of_wavelet_levels);
+        mra_hp = modwtmra_custom(wpt_hp, wavelet_type);
     catch 
         warning('CPU (Double) failed: %s. Attempting CPU (Single Precision)...');
         % Single precision fallback for OOM
-        wpt_hp = modwt(single(EEGavRef.data'), wavelet_type, number_of_wavelet_levels);
-        mra_hp = modwtmra(wpt_hp, wavelet_type);
+        wpt_hp = modwt_custom(single(EEGavRef.data'), wavelet_type, number_of_wavelet_levels);
+        mra_hp = modwtmra_custom(wpt_hp, wavelet_type);
     end
 end
 
@@ -242,15 +242,15 @@ success_main = false;
 if gpuDeviceCount > 0
     try
         data_gpu = gpuArray(unfiltered_data);
-        wpt_EEG = modwt(data_gpu, wavelet_type, number_of_wavelet_bands);
-        wpt_EEG = gather(modwtmra(wpt_EEG, wavelet_type)); 
+        wpt_EEG = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_bands);
+        wpt_EEG = gather(modwtmra_custom(wpt_EEG, wavelet_type)); 
         clear data_gpu;
         success_main = true;
     catch 
         try
              data_gpu = gpuArray(single(unfiltered_data));
-             wpt_EEG = modwt(data_gpu, wavelet_type, number_of_wavelet_bands);
-             wpt_EEG = gather(modwtmra(wpt_EEG, wavelet_type));
+             wpt_EEG = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_bands);
+             wpt_EEG = gather(modwtmra_custom(wpt_EEG, wavelet_type));
              clear data_gpu;
              success_main = true;
         catch 
@@ -262,11 +262,11 @@ end
 
 if ~success_main
     try
-        wpt_EEG = modwt(unfiltered_data, wavelet_type, number_of_wavelet_bands);
-        wpt_EEG = modwtmra(wpt_EEG, wavelet_type);
+        wpt_EEG = modwt_custom(unfiltered_data, wavelet_type, number_of_wavelet_bands);
+        wpt_EEG = modwtmra_custom(wpt_EEG, wavelet_type);
     catch 
-         wpt_EEG = modwt(single(unfiltered_data), wavelet_type, number_of_wavelet_bands);
-         wpt_EEG = modwtmra(wpt_EEG, wavelet_type); 
+         wpt_EEG = modwt_custom(single(unfiltered_data), wavelet_type, number_of_wavelet_bands);
+         wpt_EEG = modwtmra_custom(wpt_EEG, wavelet_type); 
     end
 end
 number_of_discrete_wavelet_bands = size(wpt_EEG, 1);
