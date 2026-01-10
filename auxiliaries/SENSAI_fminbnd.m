@@ -27,8 +27,7 @@ else
 end
 
 sensaifunc = @(artifactThreshold) SENSAIObjective(artifactThreshold, EEGdata_epoched, srate, epoch_size, refCOV, Eval, Evec, noise_multiplier);
-options = optimset('Display', 'off', 'TolX', 1e-1);
-[optimalThreshold, negMaxSENSAIScore] = fminbnd(sensaifunc, minThreshold, maxThreshold, options);
+[optimalThreshold, negMaxSENSAIScore] = local_fminbnd(sensaifunc, minThreshold, maxThreshold, 1e-2);
 maxSENSAIScore = -negMaxSENSAIScore;
 
     function objective = SENSAIObjective(artifact_threshold, EEGdata_epoched, srate, epoch_size, refCOV, Eval, Evec, noise_multiplier_obj)
