@@ -69,6 +69,12 @@ for i=1:N_epochs-1
     [Evec_2(:,:,i), Eval_2(:,:,i)] = eig(COV_2(:,:,i), refCOV_reg, 'chol');
 end
 [Evec(:,:,N_epochs), Eval(:,:,N_epochs)] = eig(COV(:,:,N_epochs), refCOV_reg, 'chol');
+
+% Concatenate streams for unified optimization (handling Stream 2 correctly)
+EEGdata_epoched_combined = cat(3, EEGdata_epoched, EEGdata_epoched_2);
+Eval_combined = cat(3, Eval, Eval_2);
+Evec_combined = cat(3, Evec, Evec_2);
+
 %% Determine Artifact Threshold and Clean EEG
 if ischar(artifact_threshold_type) && startsWith(artifact_threshold_type, 'auto')
     if strcmp(artifact_threshold_type,'auto+'), noise_multiplier = 1.5;
@@ -81,7 +87,7 @@ if ischar(artifact_threshold_type) && startsWith(artifact_threshold_type, 'auto'
     % --- Optimization Method Switch ---
     switch optimization_type
         case 'parabolic'
-            [optimal_artifact_threshold] = SENSAI_fminbnd(minThreshold, maxThreshold, EEGdata_epoched, srate, epoch_size, refCOV, Eval, Evec, noise_multiplier);
+            [optimal_artifact_threshold] = SENSAI_fminbnd(minThreshold, maxThreshold, EEGdata_epoched_combined, srate, epoch_size, refCOV, Eval_combined, Evec_combined, noise_multiplier);
         
         case 'grid' % Restored grid search functionality
             automatic_thresholding_step_size = 1/3;
@@ -94,7 +100,7 @@ if ischar(artifact_threshold_type) && startsWith(artifact_threshold_type, 'auto'
                 parfor threshold_index=1:length(AutomaticThresholdSweep)
                     artifact_threshold_iter = AutomaticThresholdSweep(threshold_index);
                     % Call SENSAI function
-                    [SIGNAL_subspace_similarity(threshold_index), NOISE_subspace_similarity(threshold_index), SENSAI_score(threshold_index)] = SENSAI(EEGdata_epoched, srate, epoch_size, artifact_threshold_iter, refCOV, Eval, Evec, noise_multiplier);
+                    [SIGNAL_subspace_similarity(threshold_index), NOISE_subspace_similarity(threshold_index), SENSAI_score(threshold_index)] = SENSAI(EEGdata_epoched_combined, srate, epoch_size, artifact_threshold_iter, refCOV, Eval_combined, Evec_combined, noise_multiplier);
                 end
             else
                 for threshold_index=1:length(AutomaticThresholdSweep)
