@@ -381,6 +381,7 @@ else % Non-parallel version
         current_epoch_size = epoch_sizes_per_wavelet_band(f);
         try
             [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(wavelet_data_band, srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+        disp(['processing wavelet band = ' num2str(f)])
         catch ME
             warning('GEDAI_per_band failed for band %d: %s. Retrying with single precision...', f, ME.message);
             [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
