@@ -350,46 +350,79 @@ end
 num_channels = size(cleaned_broadband_data, 1);
 num_samples = size(cleaned_broadband_data, 2);
 wavelet_band_filtered_data = zeros(num_bands_to_process, num_channels, num_samples);
+success_parallel = false;
+
 if parallel
-    temp_sensai_scores = zeros(1, num_bands_to_process);
-    temp_thresholds = zeros(1, num_bands_to_process);
-    
-    parfor f = 1:num_bands_to_process
-        wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
+    try
+        temp_sensai_scores = zeros(1, num_bands_to_process);
+        temp_thresholds = zeros(1, num_bands_to_process);
         
-        current_epoch_size = epoch_sizes_per_wavelet_band(f);
-        try
-             [cleaned_band_data, ~, temp_sensai, temp_thresh] = GEDAI_per_band(wavelet_data_band, srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
-        catch ME
-             % If OOM or other memory error, try single precision
-             warning('GEDAI_per_band failed for band %d: %s. Retrying with single precision...', f, ME.message);
-             [cleaned_band_data, ~, temp_sensai, temp_thresh] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+        parfor f = 1:num_bands_to_process
+            wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
+            
+            current_epoch_size = epoch_sizes_per_wavelet_band(f);
+            try
+                 [cleaned_band_data, ~, temp_sensai, temp_thresh] = GEDAI_per_band(wavelet_data_band, srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+            catch ME
+                 % If OOM or other memory error, try single precision
+                 warning('GEDAI_per_band failed for band %d: %s. Retrying with single precision...', f, ME.message);
+                 [cleaned_band_data, ~, temp_sensai, temp_thresh] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+            end
+            
+            wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
+            temp_sensai_scores(f) = temp_sensai;
+            temp_thresholds(f) = temp_thresh;
         end
         
-        wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
-        temp_sensai_scores(f) = temp_sensai;
-        temp_thresholds(f) = temp_thresh;
+        SENSAI_score_per_band = [SENSAI_score_per_band, temp_sensai_scores];
+        artifact_threshold_per_band = [artifact_threshold_per_band, temp_thresholds];
+        success_parallel = true;
+    catch ME
+        warning('Parallel processing failed: %s. Switching to double precision non-parallel processing.', ME.message);
+    end
+end
+
+if ~parallel || ~success_parallel
+    success_serial = false;
+    if parallel && ~success_parallel
+         disp('Executing fallback: Double Precision Non-Parallel Processing...');
     end
     
-    SENSAI_score_per_band = [SENSAI_score_per_band, temp_sensai_scores];
-    artifact_threshold_per_band = [artifact_threshold_per_band, temp_thresholds];
-    
-else % Non-parallel version
-    for f = 1:num_bands_to_process
-        wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
-        
-        current_epoch_size = epoch_sizes_per_wavelet_band(f);
-        try
-            [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(wavelet_data_band, srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
-        disp(['processing wavelet band = ' num2str(f)])
-        catch ME
-            warning('GEDAI_per_band failed for band %d: %s. Retrying with single precision...', f, ME.message);
-            [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+    try
+        for f = 1:num_bands_to_process
+            wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
+            
+            current_epoch_size = epoch_sizes_per_wavelet_band(f);
+            try
+                [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(double(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+            disp(['processing wavelet band = ' num2str(f)])
+            catch ME
+                warning('GEDAI_per_band failed for band %d: %s. Retrying with single precision...', f, ME.message);
+                [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+            end
+            
+            wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
+            SENSAI_score_per_band(f+1) = sensai_val;
+            artifact_threshold_per_band(f+1) = thresh_val;
         end
-        
-        wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
-        SENSAI_score_per_band(f+1) = sensai_val;
-        artifact_threshold_per_band(f+1) = thresh_val;
+        success_serial = true;
+    catch ME
+        warning('Double Precision Non-Parallel processing failed: %s. Switching to LAST RESORT: Single Precision Non-Parallel Processing.', ME.message);
+    end
+    
+    if ~success_serial
+         disp('Executing Last Resort: Single Precision Non-Parallel Processing...');
+         for f = 1:num_bands_to_process
+            wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
+            current_epoch_size = epoch_sizes_per_wavelet_band(f);
+            
+            [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
+            disp(['processing wavelet band (single) = ' num2str(f)])
+            
+            wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
+            SENSAI_score_per_band(f+1) = sensai_val;
+            artifact_threshold_per_band(f+1) = thresh_val;
+         end
     end
 end
 %% Finalization: Reconstruct EEG and calculate final scores
