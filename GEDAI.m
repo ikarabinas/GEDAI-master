@@ -232,6 +232,7 @@ broadband_artifact_threshold_type = 'auto-';
 SENSAI_score_per_band = broadband_sensai;
 artifact_threshold_per_band = broadband_thresh;
 %% Second pass: Wavelet decomposition and per-band denoising
+% MEMORY OPTIMIZED: Store for wavelet decomposition, will clear after
 unfiltered_data = cleaned_broadband_data';
 number_of_wavelet_levels = 3;
 number_of_wavelet_bands = 2^number_of_wavelet_levels + 1;
@@ -270,6 +271,9 @@ if ~success_main
     end
 end
 number_of_discrete_wavelet_bands = size(wpt_EEG, 1);
+
+% MEMORY OPTIMIZED: Clear source data after wavelet decomposition
+clear unfiltered_data cleaned_broadband_data;
 
 % Pre-calculate center frequencies for each MRA wavelet band
 center_frequencies = zeros(1, number_of_discrete_wavelet_bands);
@@ -347,15 +351,20 @@ for f = 1:num_bands_to_process
 end
 
 %% Denoise each wavelet band
-num_channels = size(cleaned_broadband_data, 1);
-num_samples = size(cleaned_broadband_data, 2);
-wavelet_band_filtered_data = zeros(num_bands_to_process, num_channels, num_samples);
+% MEMORY OPTIMIZED: Get dimensions from wavelet decomposition (channels × samples)
+num_channels = size(wpt_EEG, 3);  % Third dimension is channels
+num_samples = size(wpt_EEG, 2);   % Second dimension is samples
+
+% MEMORY OPTIMIZED: Use 2D accumulator instead of 3D array storage
+% This reduces memory usage by ~8x (from num_bands × channels × samples to channels × samples)
+wavelet_band_filtered_data = zeros(num_channels, num_samples);
 success_parallel = false;
 
 if parallel
     try
         temp_sensai_scores = zeros(1, num_bands_to_process);
         temp_thresholds = zeros(1, num_bands_to_process);
+        temp_cleaned_bands = cell(1, num_bands_to_process);  % MEMORY OPTIMIZED: Use cell array for temporary storage
         
         parfor f = 1:num_bands_to_process
             wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
@@ -369,10 +378,17 @@ if parallel
                  [cleaned_band_data, ~, temp_sensai, temp_thresh] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
             end
             
-            wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
+            % MEMORY OPTIMIZED: Store in cell array instead of 3D array
+            temp_cleaned_bands{f} = cleaned_band_data;
             temp_sensai_scores(f) = temp_sensai;
             temp_thresholds(f) = temp_thresh;
         end
+        
+        % MEMORY OPTIMIZED: Accumulate cleaned bands into 2D array
+        for f = 1:num_bands_to_process
+            wavelet_band_filtered_data = wavelet_band_filtered_data + temp_cleaned_bands{f};
+        end
+        clear temp_cleaned_bands;  % Free memory immediately
         
         SENSAI_score_per_band = [SENSAI_score_per_band, temp_sensai_scores];
         artifact_threshold_per_band = [artifact_threshold_per_band, temp_thresholds];
@@ -389,6 +405,7 @@ if ~parallel || ~success_parallel
     end
     
     try
+        % MEMORY OPTIMIZED: Sequential processing with direct accumulation
         for f = 1:num_bands_to_process
             wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
             
@@ -401,9 +418,13 @@ if ~parallel || ~success_parallel
                 [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
             end
             
-            wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
+            % MEMORY OPTIMIZED: Accumulate directly into 2D array
+            wavelet_band_filtered_data = wavelet_band_filtered_data + cleaned_band_data;
             SENSAI_score_per_band(f+1) = sensai_val;
             artifact_threshold_per_band(f+1) = thresh_val;
+            
+            % MEMORY OPTIMIZED: Clear band data immediately
+            clear wavelet_data_band cleaned_band_data;
         end
         success_serial = true;
     catch ME
@@ -419,16 +440,20 @@ if ~parallel || ~success_parallel
             [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
             disp(['processing wavelet band (single) = ' num2str(f)])
             
-            wavelet_band_filtered_data(f, :,:) = cleaned_band_data;
+            % MEMORY OPTIMIZED: Accumulate directly into 2D array
+            wavelet_band_filtered_data = wavelet_band_filtered_data + cleaned_band_data;
             SENSAI_score_per_band(f+1) = sensai_val;
             artifact_threshold_per_band(f+1) = thresh_val;
+            
+            % MEMORY OPTIMIZED: Clear band data immediately
+            clear wavelet_data_band cleaned_band_data;
          end
     end
 end
 %% Finalization: Reconstruct EEG and calculate final scores
-% Reconstruct EEG from cleaned wavelet bands
+% MEMORY OPTIMIZED: Data already accumulated in 2D array, no summation needed
 EEGclean = EEGavRef;
-EEGclean.data = squeeze(sum(wavelet_band_filtered_data, 1));
+EEGclean.data = wavelet_band_filtered_data;  % Already accumulated
 % Create artifact structure
 EEGartifacts = EEGclean;
 EEGartifacts.data = EEGavRef.data(:, 1:size(EEGclean.data, 2)) - EEGclean.data;
