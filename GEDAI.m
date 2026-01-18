@@ -174,7 +174,7 @@ wavelet_type = 'haar';
 success = false;
 
 % Attempt GPU Processing
-if gpuDeviceCount > 0
+if gpuDeviceCount > 1
     try
         disp('Attempting GPU processing (Double Precision)...');
         data_gpu = gpuArray(EEGavRef.data');
@@ -210,14 +210,14 @@ if ~success
     end
 end
 
-% Identify wavelet bands to remove based on lowcut_frequency
+% Identify wavelet bands to remove based on lowcut_frequency (VECTORIZED)
 srate = EEGavRef.srate;
 num_bands_hp = size(mra_hp, 1);
-for f = 1:num_bands_hp
-    upper_bound = srate / (2^f);
-    if upper_bound <= lowcut_frequency
-        mra_hp(f, :, :) = 0; % Remove bands below the cutoff
-    end
+% Vectorize: compute all upper bounds at once
+upper_bounds = srate ./ (2.^(1:num_bands_hp));
+bands_to_zero = find(upper_bounds <= lowcut_frequency);
+if ~isempty(bands_to_zero)
+    mra_hp(bands_to_zero, :, :) = 0; % Remove bands below the cutoff
 end
 
 % Reconstruct the high-passed signal
@@ -232,48 +232,19 @@ broadband_artifact_threshold_type = 'auto-';
 SENSAI_score_per_band = broadband_sensai;
 artifact_threshold_per_band = broadband_thresh;
 %% Second pass: Wavelet decomposition and per-band denoising
-% MEMORY OPTIMIZED: Store for wavelet decomposition, will clear after
+% MEMORY OPTIMIZED: Use incremental band processing instead of full decomposition
 unfiltered_data = cleaned_broadband_data';
 number_of_wavelet_levels = 3;
 number_of_wavelet_bands = 2^number_of_wavelet_levels + 1;
 wavelet_type = 'haar';
-% Robust execution order: GPU(Double) -> GPU(Single) -> CPU(Double) -> CPU(Single)
-success_main = false;
 
-if gpuDeviceCount > 0
-    try
-        data_gpu = gpuArray(unfiltered_data);
-        wpt_EEG = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_bands);
-        wpt_EEG = gather(modwtmra_custom(wpt_EEG, wavelet_type)); 
-        clear data_gpu;
-        success_main = true;
-    catch 
-        try
-             data_gpu = gpuArray(single(unfiltered_data));
-             wpt_EEG = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_bands);
-             wpt_EEG = gather(modwtmra_custom(wpt_EEG, wavelet_type));
-             clear data_gpu;
-             success_main = true;
-        catch 
-        end
-    end
-else
-    wpt_EEG = []; 
-end
+% OPTIMIZATION: Eliminated full wpt_EEG storage - bands will be extracted incrementally
+number_of_discrete_wavelet_bands = number_of_wavelet_bands;
+% Actual decomposition level needed to create number_of_discrete_wavelet_bands
+actual_decomposition_level = number_of_discrete_wavelet_bands - 1;  % MODWT creates level+1 bands
 
-if ~success_main
-    try
-        wpt_EEG = modwt_custom(unfiltered_data, wavelet_type, number_of_wavelet_bands);
-        wpt_EEG = modwtmra_custom(wpt_EEG, wavelet_type);
-    catch 
-         wpt_EEG = modwt_custom(single(unfiltered_data), wavelet_type, number_of_wavelet_bands);
-         wpt_EEG = modwtmra_custom(wpt_EEG, wavelet_type); 
-    end
-end
-number_of_discrete_wavelet_bands = size(wpt_EEG, 1);
-
-% MEMORY OPTIMIZED: Clear source data after wavelet decomposition
-clear unfiltered_data cleaned_broadband_data;
+% MEMORY OPTIMIZED: Clear source data immediately (no longer needed for full decomposition)
+clear cleaned_broadband_data;
 
 % Pre-calculate center frequencies for each MRA wavelet band
 center_frequencies = zeros(1, number_of_discrete_wavelet_bands);
@@ -351,13 +322,12 @@ for f = 1:num_bands_to_process
 end
 
 %% Denoise each wavelet band
-% MEMORY OPTIMIZED: Get dimensions from wavelet decomposition (channels × samples)
-num_channels = size(wpt_EEG, 3);  % Third dimension is channels
-num_samples = size(wpt_EEG, 2);   % Second dimension is samples
+% MEMORY OPTIMIZED: Get dimensions from unfiltered data
+[num_samples, num_channels] = size(unfiltered_data);
 
-% MEMORY OPTIMIZED: Use 2D accumulator instead of 3D array storage
-% This reduces memory usage by ~8x (from num_bands × channels × samples to channels × samples)
-wavelet_band_filtered_data = zeros(num_channels, num_samples);
+% MEMORY OPTIMIZED: Use 2D accumulator with correct type
+% Pre-allocate with same precision as input data
+wavelet_band_filtered_data = zeros(num_channels, num_samples, 'like', unfiltered_data);
 success_parallel = false;
 
 if parallel
@@ -366,8 +336,10 @@ if parallel
         temp_thresholds = zeros(1, num_bands_to_process);
         temp_cleaned_bands = cell(1, num_bands_to_process);  % MEMORY OPTIMIZED: Use cell array for temporary storage
         
+        % MEMORY OPTIMIZED: Incremental band extraction in parallel
         parfor f = 1:num_bands_to_process
-            wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
+            % Extract single band on-the-fly (no full wpt_EEG storage)
+            wavelet_data_band = modwt_single_band(unfiltered_data, wavelet_type, actual_decomposition_level, f)';
             
             current_epoch_size = epoch_sizes_per_wavelet_band(f);
             try
@@ -405,9 +377,10 @@ if ~parallel || ~success_parallel
     end
     
     try
-        % MEMORY OPTIMIZED: Sequential processing with direct accumulation
+        % MEMORY OPTIMIZED: Sequential processing with incremental band extraction
         for f = 1:num_bands_to_process
-            wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
+            % Extract single band on-the-fly (no full wpt_EEG storage)
+            wavelet_data_band = modwt_single_band(unfiltered_data, wavelet_type, actual_decomposition_level, f)';
             
             current_epoch_size = epoch_sizes_per_wavelet_band(f);
             try
@@ -434,7 +407,8 @@ if ~parallel || ~success_parallel
     if ~success_serial
          disp('Executing Last Resort: Single Precision Non-Parallel Processing...');
          for f = 1:num_bands_to_process
-            wavelet_data_band = transpose(squeeze(wpt_EEG(f,:,:)));
+            % Extract single band on-the-fly (no full wpt_EEG storage)
+            wavelet_data_band = modwt_single_band(single(unfiltered_data), wavelet_type, actual_decomposition_level, f)';
             current_epoch_size = epoch_sizes_per_wavelet_band(f);
             
             [cleaned_band_data, ~, sensai_val, thresh_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false);
