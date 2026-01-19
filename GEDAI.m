@@ -174,7 +174,7 @@ wavelet_type = 'haar';
 success = false;
 
 % Attempt GPU Processing
-if gpuDeviceCount > 1
+if gpuDeviceCount > 0
     try
         disp('Attempting GPU processing (Double Precision)...');
         data_gpu = gpuArray(EEGavRef.data');
