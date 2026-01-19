@@ -222,6 +222,7 @@ end
 
 % Reconstruct the high-passed signal
 EEGavRef.data = squeeze(sum(mra_hp, 1))';
+clear mra_hp
 
 %% First pass: Broadband denoising
 disp([newline 'SENSAI threshold detection...please wait']);
