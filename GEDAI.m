@@ -174,7 +174,7 @@ wavelet_type = 'haar';
 success = false;
 
 % Attempt GPU Processing
-if gpuDeviceCount > 0
+if gpuDeviceCount > 1
     try
         disp('Attempting GPU processing (Double Precision)...');
         data_gpu = gpuArray(EEGavRef.data');
@@ -202,11 +202,13 @@ if ~success
         disp('Attempting CPU processing (Double Precision)...');
         wpt_hp = modwt_custom(EEGavRef.data', wavelet_type, number_of_wavelet_levels);
         mra_hp = modwtmra_custom(wpt_hp, wavelet_type);
+        clear wpt_hp;
     catch 
         warning('CPU (Double) failed: %s. Attempting CPU (Single Precision)...');
         % Single precision fallback for OOM
         wpt_hp = modwt_custom(single(EEGavRef.data'), wavelet_type, number_of_wavelet_levels);
         mra_hp = modwtmra_custom(wpt_hp, wavelet_type);
+        clear wpt_hp;
     end
 end
 
@@ -425,6 +427,10 @@ if ~parallel || ~success_parallel
          end
     end
 end
+
+% MEMORY OPTIMIZED: Clear unfiltered data after all wavelet processing
+clear unfiltered_data;
+
 %% Finalization: Reconstruct EEG and calculate final scores
 % MEMORY OPTIMIZED: Data already accumulated in 2D array, no summation needed
 EEGclean = EEGavRef;
