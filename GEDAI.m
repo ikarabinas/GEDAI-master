@@ -496,6 +496,47 @@ if ~isempty(regions)
         end
     end
 
+    % --- Apply windowing/tapering to smooth discontinuities at the seams after epoch rejection ---
+    taper_duration = 0.05; % 50 ms
+    taper_points = round(taper_duration * EEGclean.srate);
+    % Create a cosine taper (half-Hanning)
+    % We want 0 to 1 over 'taper_points'. 
+    % Hanning is (1 - cos(phi))/2. 
+    % phi=0 -> 0. phi=pi -> 1.
+    taper_phase = linspace(0, pi, taper_points);
+    taper_attack = (1 - cos(taper_phase)) / 2; % Rise 0 to 1
+    taper_decay = fliplr(taper_attack);        % Fall 1 to 0
+
+    % Find transitions
+    % diff = -1: Keep -> Reject (End of valid segment) -> Apply Decay
+    decay_indices = find(diff(samples_to_keep) == -1);
+    
+    % diff = 1: Reject -> Keep (Start of valid segment) -> Apply Attack
+    attack_indices = find(diff(samples_to_keep) == 1) + 1;
+    
+    % Apply Decay (Fade Out)
+    for idx = decay_indices
+        s_start = max(1, idx - taper_points + 1);
+        s_end = idx;
+        len = s_end - s_start + 1;
+        
+        current_taper = taper_decay(end-len+1:end); % Match length
+        EEGclean.data(:, s_start:s_end) = EEGclean.data(:, s_start:s_end) .* current_taper; 
+        EEGartifacts.data(:, s_start:s_end) = EEGartifacts.data(:, s_start:s_end) .* current_taper;
+    end
+    
+    % Apply Attack (Fade In)
+    for idx = attack_indices
+        s_start = idx;
+        s_end = min(EEGclean.pnts, idx + taper_points - 1);
+        len = s_end - s_start + 1;
+        
+        current_taper = taper_attack(1:len);
+        EEGclean.data(:, s_start:s_end) = EEGclean.data(:, s_start:s_end) .* current_taper;
+        EEGartifacts.data(:, s_start:s_end) = EEGartifacts.data(:, s_start:s_end) .* current_taper;
+    end
+    % -----------------------------------------------------------------------
+
     % Apply mask to EEGclean
     EEGclean.data = EEGclean.data(:, samples_to_keep);
     EEGclean.pnts = size(EEGclean.data, 2);
