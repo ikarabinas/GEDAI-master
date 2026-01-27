@@ -135,6 +135,10 @@ if rem(broadband_epoch_size*EEGin.srate, 2) ~= 0
     end
     broadband_epoch_size = target_total_samples_int / EEGin.srate;
 end
+
+%% Ensure double input (initially)
+EEGin.data=double(EEGin.data);
+
 %% Pre-processing
 EEGavRef = GEDAI_nonRankDeficientAveRef(EEGin); % non rank-deficient average referencing (Makoto's plugin)
 
