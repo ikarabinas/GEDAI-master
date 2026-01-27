@@ -79,9 +79,11 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.reject_by_enova.Comment = 'Enable';
     sProcess.options.reject_by_enova.Type    = 'checkbox';
     sProcess.options.reject_by_enova.Value   = 0;
+    sProcess.options.reject_by_enova.Controller = 'enova';
     sProcess.options.enova_threshold.Comment = 'ENOVA Threshold (0-1)';
     sProcess.options.enova_threshold.Type    = 'value';
     sProcess.options.enova_threshold.Value   = {0.9, '', 2};
+    sProcess.options.enova_threshold.Class   = 'enova';
 end
 
 
