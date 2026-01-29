@@ -181,32 +181,14 @@ else
             refCOV = L.leadfield4GEDAI.gram_matrix_avref(chanidx,chanidx);
 
         case 'interpolated'
-    % 1. Verification of Spatial Locations
-    % We check if the number of populated X and sph_theta coordinates 
-    % matches the actual number of channels.
-    num_chans = length(EEGavRef.chanlocs);
-    has_cartesian = length([EEGavRef.chanlocs.X]) == num_chans;
-    has_spherical = length([EEGavRef.chanlocs.sph_theta]) == num_chans;
-    
-    if ~has_cartesian || ~has_spherical
-        error(['CRITICAL: Channel locations are incomplete. ' ...
-               'Ensure all %d channels have X, Y, Z and spherical coordinates.'], num_chans);
-    
-    else
-        % 2. Leadfield Processing
-        disp([newline 'GEDAI Leadfield model: BEM interpolated'])
-        L = load('fsavLEADFIELD_4_GEDAI.mat');
-        
-        % The leadfield data needs to be average referenced before interpolation
-        leadfield_EEG = L.leadfield4GEDAI.EEG;
-        
-        % Average reference the Gain matrix (channels x sources)
-        leadfield_EEG.data = L.leadfield4GEDAI.Gain - mean(L.leadfield4GEDAI.Gain, 1); 
-        
-        % 3. Interpolation and Covariance
-        interpolated_EEG = interp_mont_GEDAI(leadfield_EEG, EEGavRef.chanlocs);
-        refCOV = interpolated_EEG.data * interpolated_EEG.data';
-    end
+            disp([newline 'GEDAI Leadfield model: BEM interpolated'])
+            disp('hello')
+            L=load('fsavLEADFIELD_4_GEDAI.mat');
+            % The leadfield data needs to be average referenced before interpolation
+            leadfield_EEG = L.leadfield4GEDAI.EEG;
+            leadfield_EEG.data = L.leadfield4GEDAI.Gain - mean(L.leadfield4GEDAI.Gain, 1); % Average reference
+            interpolated_EEG = interp_mont_GEDAI(leadfield_EEG, EEGavRef.chanlocs);
+            refCOV = interpolated_EEG.data*interpolated_EEG.data';
     end
 end
 % --- Wavelet-based High-Pass Filtering ---
