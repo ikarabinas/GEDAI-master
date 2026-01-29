@@ -153,7 +153,28 @@ else
             L=load('fsavLEADFIELD_4_GEDAI.mat');
             electrodes_labels = {EEGin.chanlocs.labels};
             template_electrode_labels = {L.leadfield4GEDAI.electrodes.Name};
-            [~, chanidx] = ismember(lower(electrodes_labels), lower(template_electrode_labels));
+            
+            % Extract matching substrings from EEG labels
+            chanidx = zeros(1, length(electrodes_labels));
+            for i = 1:length(electrodes_labels)
+                eeg_label = electrodes_labels{i};
+                % Try direct match first
+                [found, idx] = ismember(lower(eeg_label), lower(template_electrode_labels));
+                if found
+                    chanidx(i) = idx;
+                else
+                    % Search for template labels within the EEG label
+                    for j = 1:length(template_electrode_labels)
+                        template_label = template_electrode_labels{j};
+                        % Case-insensitive substring search
+                        if contains(lower(eeg_label), lower(template_label))
+                            chanidx(i) = j;
+                            break;
+                        end
+                    end
+                end
+            end
+            
             if any(chanidx == 0)
                 error('Electrode labels not found. Select "interpolated" leadfield matrix for non-standard locations.');
             end
