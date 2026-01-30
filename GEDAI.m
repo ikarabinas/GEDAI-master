@@ -627,6 +627,9 @@ EEGclean.etc.GEDAI.SENSAI_score_per_band = SENSAI_score_per_band;
 EEGclean.etc.GEDAI.artifact_threshold_per_band = artifact_threshold_per_band;
 EEGclean.etc.GEDAI.mean_ENOVA = mean_ENOVA;
 EEGclean.etc.GEDAI.ENOVA_per_epoch = ENOVA_per_epoch;
+EEGclean.etc.GEDAI.epochs_rejected = num_rejected;
+EEGclean.etc.GEDAI.total_epochs = original_total_epochs;
+EEGclean.etc.GEDAI.percentage_rejected = percentage_rejected;
 
 % Add command history to EEGLAB structure
 if exist('eegh', 'file')
