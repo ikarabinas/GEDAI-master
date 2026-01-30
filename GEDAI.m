@@ -621,6 +621,13 @@ disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2s
 
 disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds' newline]);
 
+% Store GEDAI variables in EEG.etc.GEDAI
+EEGclean.etc.GEDAI.SENSAI_score = SENSAI_score;
+EEGclean.etc.GEDAI.SENSAI_score_per_band = SENSAI_score_per_band;
+EEGclean.etc.GEDAI.artifact_threshold_per_band = artifact_threshold_per_band;
+EEGclean.etc.GEDAI.mean_ENOVA = mean_ENOVA;
+EEGclean.etc.GEDAI.ENOVA_per_epoch = ENOVA_per_epoch;
+
 % Add command history to EEGLAB structure
 if exist('eegh', 'file')
     EEGclean = eegh(com, EEGclean);
