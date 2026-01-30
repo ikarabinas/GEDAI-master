@@ -483,10 +483,12 @@ EEGclean.data = wavelet_band_filtered_data;  % Already accumulated
 EEGartifacts = EEGclean;
 EEGartifacts.data = EEGavRef.data(:, 1:size(EEGclean.data, 2)) - EEGclean.data;
 
-% Calculate composite SENSAI score
+% Calculate composite SENSAI score for epoch rejection
 noise_multiplier = 1;
 [SENSAI_score, ~, ~, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(double(EEGclean.data), double(EEGartifacts.data), EEGavRef.srate, broadband_epoch_size, refCOV, noise_multiplier);
 
+% Store original epoch count for rejection statistics
+original_total_epochs = length(ENOVA_per_epoch);
 epochs_to_remove = find(ENOVA_per_epoch > ENOVA_threshold);
 regions = [];
 if ~isempty(epochs_to_remove)
@@ -608,14 +610,14 @@ end
 disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
 disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
 
-total_epochs = length(ENOVA_per_epoch);
+% Use original epoch count for rejection statistics (before rejection)
 num_rejected = length(epochs_to_remove);
-if total_epochs > 0
-    percentage_rejected = (num_rejected / total_epochs) * 100;
+if original_total_epochs > 0
+    percentage_rejected = (num_rejected / original_total_epochs) * 100;
 else
     percentage_rejected = 0;
 end
-disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(total_epochs) ' epochs)']);
+disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(original_total_epochs) ' epochs)']);
 
 disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds' newline]);
 
