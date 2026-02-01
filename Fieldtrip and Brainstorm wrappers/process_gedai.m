@@ -148,8 +148,23 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     % Load channel file
     ChannelMat = in_bst_channel(sChannel.FileName);
 
+    % Filter for EEG and MEG channels only
+    eeg_meg_idx = find(ismember({ChannelMat.Channel.Type}, {'EEG', 'MEG', 'MEG MAG', 'MEG GRAD'}));
+    if isempty(eeg_meg_idx)
+        bst_report('Error', sProcess, sInput, 'No EEG or MEG channels found in the data.');
+        return;
+    end
+    
+    % Create filtered channel structure
+    ChannelMatFiltered = ChannelMat;
+    ChannelMatFiltered.Channel = ChannelMat.Channel(eeg_meg_idx);
+    
+    % Create filtered input structure with only EEG/MEG channel data
+    sInputFiltered = sInput;
+    sInputFiltered.A = sInput.A(eeg_meg_idx, :);
+
     % Convert Brainstorm sInput to EEGLAB format
-    EEG = brainstorm2eeglab(sInput, ChannelMat);
+    EEG = brainstorm2eeglab(sInputFiltered, ChannelMatFiltered);
 
     % Handle ref_matrix_type
     if strcmp(ref_matrix_type, 'Brainstorm leadfield')
@@ -157,8 +172,11 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         HeadModelFile = sStudy.HeadModel(sStudy.iHeadModel).FileName;
         HeadModel = in_bst_headmodel(HeadModelFile, 0, 'Gain');
         
+        % Filter Gain matrix to match EEG/MEG channels only
+        Gain_eeg = HeadModel.Gain(eeg_meg_idx, :);
+        
         % Apply average reference to leadfield
-        Gain_avref = HeadModel.Gain - mean(HeadModel.Gain, 1);
+        Gain_avref = Gain_eeg - mean(Gain_eeg, 1);
 
         % Compute channel covariance matrix
         ref_matrix_param = Gain_avref * Gain_avref';
@@ -173,8 +191,14 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     % Run GEDAI
     EEGclean = GEDAI(EEG, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param, parallel, visualize_artifacts, enova_threshold);
     
+    % Map cleaned EEG/MEG data back to original channel positions
+    sOutput = sInput;
+    sOutput.A = sInput.A;  % Start with original data (includes all channel types)
+    sOutput.A(eeg_meg_idx, :) = EEGclean.data;  % Replace only EEG/MEG channels with cleaned data
+    
     % Convert back to Brainstorm format
-    sInput = eeglab2brainstorm(EEGclean, sInput);
+    sInput = eeglab2brainstorm(EEGclean, sInputFiltered);
+    sInput.A = sOutput.A;  % Use the full channel data with cleaned EEG
     sInput.CommentTag = FormatComment(sProcess);
     if isfield(sInput, 'Std') && ~isempty(sInput.Std)
         sInput.Std = [];
