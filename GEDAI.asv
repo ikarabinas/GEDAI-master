@@ -92,7 +92,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold)
+function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold, number_of_wavelet_bands)
 
 if nargin < 2 || isempty(artifact_threshold_type)
     artifact_threshold_type = 'auto';
@@ -114,6 +114,9 @@ if nargin < 7 || isempty(visualize_artifacts)
 end
 if nargin < 8 || isempty(ENOVA_threshold)
     ENOVA_threshold = inf; % If empty, set to infinity to disable rejection
+end
+if nargin < 9 || isempty(number_of_wavelet_bands)
+    number_of_wavelet_bands = 9; % Default number of wavelet bands (was previously derived from level 3, so 2^3+1=9)
 end
 
 p = fileparts(which('GEDAI'));
@@ -181,18 +184,36 @@ else
             refCOV = L.leadfield4GEDAI.gram_matrix_avref(chanidx,chanidx);
 
         case 'interpolated'
-            disp([newline 'GEDAI Leadfield model: BEM interpolated'])
-            disp('hello')
-            L=load('fsavLEADFIELD_4_GEDAI.mat');
-            % The leadfield data needs to be average referenced before interpolation
-            leadfield_EEG = L.leadfield4GEDAI.EEG;
-            leadfield_EEG.data = L.leadfield4GEDAI.Gain - mean(L.leadfield4GEDAI.Gain, 1); % Average reference
-            interpolated_EEG = interp_mont_GEDAI(leadfield_EEG, EEGavRef.chanlocs);
-            refCOV = interpolated_EEG.data*interpolated_EEG.data';
+    % 1. Verification of Spatial Locations
+    % We check if the number of populated X and sph_theta coordinates 
+    % matches the actual number of channels.
+    num_chans = length(EEGavRef.chanlocs);
+    has_cartesian = length([EEGavRef.chanlocs.X]) == num_chans;
+    has_spherical = length([EEGavRef.chanlocs.sph_theta]) == num_chans;
+    
+    if ~has_cartesian || ~has_spherical
+        error(['CRITICAL: Channel locations are incomplete. ' ...
+               'Ensure all %d channels have X, Y, Z and spherical coordinates.'], num_chans);
+    
+    else
+        % 2. Leadfield Processing
+        disp([newline 'GEDAI Leadfield model: BEM interpolated'])
+        L = load('fsavLEADFIELD_4_GEDAI.mat');
+        
+        % The leadfield data needs to be average referenced before interpolation
+        leadfield_EEG = L.leadfield4GEDAI.EEG;
+        
+        % Average reference the Gain matrix (channels x sources)
+        leadfield_EEG.data = L.leadfield4GEDAI.Gain - mean(L.leadfield4GEDAI.Gain, 1); 
+        
+        % 3. Interpolation and Covariance
+        interpolated_EEG = interp_mont_GEDAI(leadfield_EEG, EEGavRef.chanlocs);
+        refCOV = interpolated_EEG.data * interpolated_EEG.data';
+    end
     end
 end
 % --- Wavelet-based High-Pass Filtering ---
-number_of_wavelet_levels = 3;
+hp_wavelet_levels = 3;
 wavelet_type = 'haar';
 
 % Decompose the signal
@@ -204,7 +225,7 @@ if gpuDeviceCount > 0
     try
         disp('Attempting GPU processing (Double Precision)...');
         data_gpu = gpuArray(EEGavRef.data');
-        wpt_hp = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_levels);
+        wpt_hp = modwt_custom(data_gpu, wavelet_type, hp_wavelet_levels);
         mra_hp = gather(modwtmra_custom(wpt_hp, wavelet_type)); 
         clear data_gpu wpt_hp;
         success = true;
@@ -212,7 +233,7 @@ if gpuDeviceCount > 0
         warning('GPU (Double) failed: %s. Attempting GPU (Single Precision)...');
         try
             data_gpu = gpuArray(single(EEGavRef.data'));
-            wpt_hp = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_levels);
+            wpt_hp = modwt_custom(data_gpu, wavelet_type, hp_wavelet_levels);
             mra_hp = gather(modwtmra_custom(wpt_hp, wavelet_type)); 
             clear data_gpu wpt_hp;
             success = true;
@@ -226,13 +247,13 @@ end
 if ~success
     try
         disp('Attempting CPU processing (Double Precision)...');
-        wpt_hp = modwt_custom(EEGavRef.data', wavelet_type, number_of_wavelet_levels);
+        wpt_hp = modwt_custom(EEGavRef.data', wavelet_type, hp_wavelet_levels);
         mra_hp = modwtmra_custom(wpt_hp, wavelet_type);
         clear wpt_hp;
     catch 
         warning('CPU (Double) failed: %s. Attempting CPU (Single Precision)...');
         % Single precision fallback for OOM
-        wpt_hp = modwt_custom(single(EEGavRef.data'), wavelet_type, number_of_wavelet_levels);
+        wpt_hp = modwt_custom(single(EEGavRef.data'), wavelet_type, hp_wavelet_levels);
         mra_hp = modwtmra_custom(wpt_hp, wavelet_type);
         clear wpt_hp;
     end
@@ -252,6 +273,8 @@ end
 EEGavRef.data = squeeze(sum(mra_hp, 1))';
 clear mra_hp
 
+
+
 %% First pass: Broadband denoising
 disp([newline 'SENSAI threshold detection...please wait']);
 broadband_optimization_type = 'parabolic';
@@ -263,8 +286,8 @@ artifact_threshold_per_band = broadband_thresh;
 %% Second pass: Wavelet decomposition and per-band denoising
 % MEMORY OPTIMIZED: Use incremental band processing instead of full decomposition
 unfiltered_data = cleaned_broadband_data';
-number_of_wavelet_levels = 3;
-number_of_wavelet_bands = 2^number_of_wavelet_levels + 1;
+number_of_wavelet_bands = number_of_wavelet_bands; % Explicit assignment to show it's used here, though not strictly needed if passed as arg
+% Was: number_of_wavelet_levels = 3; number_of_wavelet_bands = 2^number_of_wavelet_levels + 1;
 wavelet_type = 'haar';
 
 % OPTIMIZATION: Eliminated full wpt_EEG storage - bands will be extracted incrementally
@@ -276,6 +299,7 @@ actual_decomposition_level = number_of_discrete_wavelet_bands - 1;  % MODWT crea
 clear cleaned_broadband_data;
 
 % Pre-calculate center frequencies for each MRA wavelet band
+srate = EEGavRef.srate;
 center_frequencies = zeros(1, number_of_discrete_wavelet_bands);
 lower_frequencies = zeros(1, number_of_discrete_wavelet_bands);
 upper_frequencies = zeros(1, number_of_discrete_wavelet_bands);
@@ -465,10 +489,12 @@ EEGclean.data = wavelet_band_filtered_data;  % Already accumulated
 EEGartifacts = EEGclean;
 EEGartifacts.data = EEGavRef.data(:, 1:size(EEGclean.data, 2)) - EEGclean.data;
 
-% Calculate composite SENSAI score
+% Calculate composite SENSAI score for epoch rejection
 noise_multiplier = 1;
 [SENSAI_score, ~, ~, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(double(EEGclean.data), double(EEGartifacts.data), EEGavRef.srate, broadband_epoch_size, refCOV, noise_multiplier);
 
+% Store original epoch count for rejection statistics
+original_total_epochs = length(ENOVA_per_epoch);
 epochs_to_remove = find(ENOVA_per_epoch > ENOVA_threshold);
 regions = [];
 if ~isempty(epochs_to_remove)
@@ -492,8 +518,8 @@ tEnd = toc(tStart);
 if ~ischar(ref_matrix_type)
     ref_matrix_type = 'custom';
 end
-com = sprintf('EEG = GEDAI(EEG, ''%s'', %s,  %s, ''%s'', %d,  %d, %s);', ...
-    artifact_threshold_type, num2str(epoch_size_in_cycles), num2str(lowcut_frequency), ref_matrix_type, parallel, visualize_artifacts, num2str(ENOVA_threshold));
+com = sprintf('EEG = GEDAI(EEG, ''%s'', %s,  %s, ''%s'', %d,  %d, %s, %s);', ...
+    artifact_threshold_type, num2str(epoch_size_in_cycles), num2str(lowcut_frequency), ref_matrix_type, parallel, visualize_artifacts, num2str(ENOVA_threshold), num2str(number_of_wavelet_bands));
 
 if visualize_artifacts
     EEGclean_for_vis = EEGclean;
@@ -590,16 +616,26 @@ end
 disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
 disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
 
-total_epochs = length(ENOVA_per_epoch);
+% Use original epoch count for rejection statistics (before rejection)
 num_rejected = length(epochs_to_remove);
-if total_epochs > 0
-    percentage_rejected = (num_rejected / total_epochs) * 100;
+if original_total_epochs > 0
+    percentage_rejected = (num_rejected / original_total_epochs) * 100;
 else
     percentage_rejected = 0;
 end
-disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(total_epochs) ' epochs)']);
+disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(original_total_epochs) ' epochs)']);
 
 disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds' newline]);
+
+% Store GEDAI variables in EEG.etc.GEDAI
+EEGclean.etc.GEDAI.SENSAI_score = SENSAI_score;
+EEGclean.etc.GEDAI.SENSAI_score_per_band = SENSAI_score_per_band;
+EEGclean.etc.GEDAI.artifact_threshold_per_band = artifact_threshold_per_band;
+EEGclean.etc.GEDAI.mean_ENOVA = mean_ENOVA;
+EEGclean.etc.GEDAI.ENOVA_per_epoch = ENOVA_per_epoch;
+EEGclean.etc.GEDAI.epochs_rejected = num_rejected;
+EEGclean.etc.GEDAI.total_epochs = original_total_epochs;
+EEGclean.etc.GEDAI.percentage_rejected = percentage_rejected;
 
 % Add command history to EEGLAB structure
 if exist('eegh', 'file')

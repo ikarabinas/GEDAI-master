@@ -92,7 +92,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold)
+function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold, number_of_wavelet_bands)
 
 if nargin < 2 || isempty(artifact_threshold_type)
     artifact_threshold_type = 'auto';
@@ -114,6 +114,9 @@ if nargin < 7 || isempty(visualize_artifacts)
 end
 if nargin < 8 || isempty(ENOVA_threshold)
     ENOVA_threshold = inf; % If empty, set to infinity to disable rejection
+end
+if nargin < 9 || isempty(number_of_wavelet_bands)
+    number_of_wavelet_bands = 9; % Default number of wavelet bands (was previously derived from level 3, so 2^3+1=9)
 end
 
 p = fileparts(which('GEDAI'));
@@ -210,7 +213,13 @@ else
     end
 end
 % --- Wavelet-based High-Pass Filtering ---
-number_of_wavelet_levels = 3;
+% Calculate required level to resolve lowcut_frequency
+hp_wavelet_levels = ceil(log2(EEGavRef.srate / lowcut_frequency) - 1);
+% Limit to maximum possible level given data length
+max_possible_level = floor(log2(size(EEGavRef.data, 2)));
+hp_wavelet_levels = min(hp_wavelet_levels, max_possible_level);
+% Ensure reasonable minimum
+hp_wavelet_levels = max(hp_wavelet_levels, 3);
 wavelet_type = 'haar';
 
 % Decompose the signal
@@ -222,7 +231,7 @@ if gpuDeviceCount > 0
     try
         disp('Attempting GPU processing (Double Precision)...');
         data_gpu = gpuArray(EEGavRef.data');
-        wpt_hp = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_levels);
+        wpt_hp = modwt_custom(data_gpu, wavelet_type, hp_wavelet_levels);
         mra_hp = gather(modwtmra_custom(wpt_hp, wavelet_type)); 
         clear data_gpu wpt_hp;
         success = true;
@@ -230,7 +239,7 @@ if gpuDeviceCount > 0
         warning('GPU (Double) failed: %s. Attempting GPU (Single Precision)...');
         try
             data_gpu = gpuArray(single(EEGavRef.data'));
-            wpt_hp = modwt_custom(data_gpu, wavelet_type, number_of_wavelet_levels);
+            wpt_hp = modwt_custom(data_gpu, wavelet_type, hp_wavelet_levels);
             mra_hp = gather(modwtmra_custom(wpt_hp, wavelet_type)); 
             clear data_gpu wpt_hp;
             success = true;
@@ -244,13 +253,13 @@ end
 if ~success
     try
         disp('Attempting CPU processing (Double Precision)...');
-        wpt_hp = modwt_custom(EEGavRef.data', wavelet_type, number_of_wavelet_levels);
+        wpt_hp = modwt_custom(EEGavRef.data', wavelet_type, hp_wavelet_levels);
         mra_hp = modwtmra_custom(wpt_hp, wavelet_type);
         clear wpt_hp;
     catch 
         warning('CPU (Double) failed: %s. Attempting CPU (Single Precision)...');
         % Single precision fallback for OOM
-        wpt_hp = modwt_custom(single(EEGavRef.data'), wavelet_type, number_of_wavelet_levels);
+        wpt_hp = modwt_custom(single(EEGavRef.data'), wavelet_type, hp_wavelet_levels);
         mra_hp = modwtmra_custom(wpt_hp, wavelet_type);
         clear wpt_hp;
     end
@@ -281,8 +290,8 @@ artifact_threshold_per_band = broadband_thresh;
 %% Second pass: Wavelet decomposition and per-band denoising
 % MEMORY OPTIMIZED: Use incremental band processing instead of full decomposition
 unfiltered_data = cleaned_broadband_data';
-number_of_wavelet_levels = 3;
-number_of_wavelet_bands = 2^number_of_wavelet_levels + 1;
+number_of_wavelet_bands = number_of_wavelet_bands; % Explicit assignment to show it's used here, though not strictly needed if passed as arg
+% Was: number_of_wavelet_levels = 3; number_of_wavelet_bands = 2^number_of_wavelet_levels + 1;
 wavelet_type = 'haar';
 
 % OPTIMIZATION: Eliminated full wpt_EEG storage - bands will be extracted incrementally
@@ -294,6 +303,7 @@ actual_decomposition_level = number_of_discrete_wavelet_bands - 1;  % MODWT crea
 clear cleaned_broadband_data;
 
 % Pre-calculate center frequencies for each MRA wavelet band
+srate = EEGavRef.srate;
 center_frequencies = zeros(1, number_of_discrete_wavelet_bands);
 lower_frequencies = zeros(1, number_of_discrete_wavelet_bands);
 upper_frequencies = zeros(1, number_of_discrete_wavelet_bands);
@@ -512,8 +522,8 @@ tEnd = toc(tStart);
 if ~ischar(ref_matrix_type)
     ref_matrix_type = 'custom';
 end
-com = sprintf('EEG = GEDAI(EEG, ''%s'', %s,  %s, ''%s'', %d,  %d, %s);', ...
-    artifact_threshold_type, num2str(epoch_size_in_cycles), num2str(lowcut_frequency), ref_matrix_type, parallel, visualize_artifacts, num2str(ENOVA_threshold));
+com = sprintf('EEG = GEDAI(EEG, ''%s'', %s,  %s, ''%s'', %d,  %d, %s, %s);', ...
+    artifact_threshold_type, num2str(epoch_size_in_cycles), num2str(lowcut_frequency), ref_matrix_type, parallel, visualize_artifacts, num2str(ENOVA_threshold), num2str(number_of_wavelet_bands));
 
 if visualize_artifacts
     EEGclean_for_vis = EEGclean;
