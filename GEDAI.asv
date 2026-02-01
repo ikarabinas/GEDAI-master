@@ -92,7 +92,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold, number_of_wavelet_bands)
+function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold)
 
 if nargin < 2 || isempty(artifact_threshold_type)
     artifact_threshold_type = 'auto';
@@ -114,9 +114,6 @@ if nargin < 7 || isempty(visualize_artifacts)
 end
 if nargin < 8 || isempty(ENOVA_threshold)
     ENOVA_threshold = inf; % If empty, set to infinity to disable rejection
-end
-if nargin < 9 || isempty(number_of_wavelet_bands)
-    number_of_wavelet_bands = 9; % Default number of wavelet bands (was previously derived from level 3, so 2^3+1=9)
 end
 
 p = fileparts(which('GEDAI'));
@@ -213,12 +210,20 @@ else
     end
 end
 % --- Wavelet-based High-Pass Filtering ---
-hp_wavelet_levels = 3;
+% Calculate required level to resolve lowcut_frequency
+hp_wavelet_levels = ceil(log2(EEGavRef.srate / lowcut_frequency) - 1);
+% Limit to maximum possible level given data length
+max_possible_level = floor(log2(size(EEGavRef.data, 2)));
+hp_wavelet_levels = min(hp_wavelet_levels, max_possible_level);
+% Ensure reasonable minimum
+hp_wavelet_levels = max(hp_wavelet_levels, 3);
 wavelet_type = 'haar';
 
 % Decompose the signal
 % Robust execution order: GPU(Double) -> GPU(Single) -> CPU(Double) -> CPU(Single)
 success = false;
+
+disp(['Wavelet high-pass filtering > ' num2str(lowcut_frequency) 'Hz']);
 
 % Attempt GPU Processing
 if gpuDeviceCount > 0
@@ -273,8 +278,6 @@ end
 EEGavRef.data = squeeze(sum(mra_hp, 1))';
 clear mra_hp
 
-
-
 %% First pass: Broadband denoising
 disp([newline 'SENSAI threshold detection...please wait']);
 broadband_optimization_type = 'parabolic';
@@ -286,8 +289,6 @@ artifact_threshold_per_band = broadband_thresh;
 %% Second pass: Wavelet decomposition and per-band denoising
 % MEMORY OPTIMIZED: Use incremental band processing instead of full decomposition
 unfiltered_data = cleaned_broadband_data';
-number_of_wavelet_bands = number_of_wavelet_bands; % Explicit assignment to show it's used here, though not strictly needed if passed as arg
-% Was: number_of_wavelet_levels = 3; number_of_wavelet_bands = 2^number_of_wavelet_levels + 1;
 wavelet_type = 'haar';
 
 % OPTIMIZATION: Eliminated full wpt_EEG storage - bands will be extracted incrementally
@@ -418,8 +419,8 @@ if parallel
         SENSAI_score_per_band = [SENSAI_score_per_band, temp_sensai_scores];
         artifact_threshold_per_band = [artifact_threshold_per_band, temp_thresholds];
         success_parallel = true;
-    catch ME
-        warning('Parallel processing failed: %s. Switching to double precision non-parallel processing.', ME.message);
+    catch 
+        warning('Parallel processing failed: %s. Switching to double precision non-parallel processing.');
     end
 end
 
@@ -453,8 +454,8 @@ if ~parallel || ~success_parallel
             clear wavelet_data_band cleaned_band_data;
         end
         success_serial = true;
-    catch ME
-        warning('Double Precision Non-Parallel processing failed: %s. Switching to LAST RESORT: Single Precision Non-Parallel Processing.', ME.message);
+    catch
+        warning('Double Precision Non-Parallel processing failed: %s. Switching to LAST RESORT: Single Precision Non-Parallel Processing.');
     end
     
     if ~success_serial
