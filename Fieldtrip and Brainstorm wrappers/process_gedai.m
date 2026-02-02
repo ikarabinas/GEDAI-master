@@ -227,20 +227,55 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     
     % Map cleaned EEG/MEG data back to original channel positions
     sOutput = sInput;
-    sOutput.A = sInput.A;  % Start with original data (includes all channel types)
+    
+    % Check if epochs were rejected and apply mask to non-EEG channels
+    if isfield(EEGclean.etc, 'GEDAI') && isfield(EEGclean.etc.GEDAI, 'samples_to_keep')
+        mask = EEGclean.etc.GEDAI.samples_to_keep;
+        if length(mask) == size(sOutput.A, 2)
+            sOutput.A = sOutput.A(:, mask);
+            if length(sOutput.TimeVector) == length(mask)
+                 sOutput.TimeVector = sOutput.TimeVector(mask);
+            end
+        end
+    end
+
     sOutput.A(eeg_meg_idx, :) = EEGclean.data;  % Replace only EEG/MEG channels with cleaned data
     
     % Convert back to Brainstorm format
     sInput = eeglab2brainstorm(EEGclean, sInputFiltered);
     sInput.A = sOutput.A;  % Use the full channel data with cleaned EEG
-    sInput.CommentTag = FormatComment(sProcess);
+    
+    % Update Comment logic
+    new_duration = sInput.TimeVector(end) - sInput.TimeVector(1);
+    
+    % Get the base comment
+    current_comment = sInput.Comment;
+    
+    % Strip old duration tag
+    current_comment = regexprep(current_comment, ' \([\d\.]+s,[\d\.]+s\)', ''); 
+    
+    % Generate GEDAI parameters tag
+    gedai_params = FormatComment(sProcess);
+    
+    % Append stats
+    if isfield(EEGclean.etc, 'GEDAI')
+        rej_percent = EEGclean.etc.GEDAI.percentage_rejected;
+        gedai_params = [gedai_params, sprintf(', Rej=%.1f%% (%.1fs)', rej_percent, new_duration)];
+    end
+    
+    % Explicitly set the full Comment string to ensure it appears
+    sInput.Comment = [current_comment, ' | ', gedai_params];
+    
+    % Clear CommentTag to avoid duplication if Brainstorm tries to auto-append
+    sInput.CommentTag = []; 
+
     if isfield(sInput, 'Std') && ~isempty(sInput.Std)
         sInput.Std = [];
     end
     % Unload GEDAI plugin if loaded by this process
-    if unloadPlug
-        bst_plugin('Unload', 'gedai');
-    end
+    % if unloadPlug
+    %     bst_plugin('Unload', 'gedai');
+    % end
 end
 
 %% ===== HELPER FUNCTIONS =====

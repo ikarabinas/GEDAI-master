@@ -638,6 +638,14 @@ EEGclean.etc.GEDAI.ENOVA_per_epoch = ENOVA_per_epoch;
 EEGclean.etc.GEDAI.epochs_rejected = num_rejected;
 EEGclean.etc.GEDAI.total_epochs = original_total_epochs;
 EEGclean.etc.GEDAI.percentage_rejected = percentage_rejected;
+if exist('samples_to_keep', 'var')
+    EEGclean.etc.GEDAI.samples_to_keep = samples_to_keep;
+else
+    EEGclean.etc.GEDAI.samples_to_keep = true(1, original_total_epochs * round(broadband_epoch_size * EEGavRef.srate)); 
+    % Note: The above calculation might be slightly off if rounding happened differently for 'pnts'.
+    % Safer to use current pnts if no rejection happened:
+    EEGclean.etc.GEDAI.samples_to_keep = true(1, size(EEGclean.data, 2));
+end
 
 % Add command history to EEGLAB structure
 if exist('eegh', 'file')
