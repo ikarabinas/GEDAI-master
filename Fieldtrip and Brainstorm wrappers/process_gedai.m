@@ -166,10 +166,44 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     % Convert Brainstorm sInput to EEGLAB format
     EEG = brainstorm2eeglab(sInputFiltered, ChannelMatFiltered);
 
+    % Explicitly ensure sampling rate is correct based on the input TimeVector
+    if length(sInputFiltered.TimeVector) > 1
+        EEG.srate = 1 / mean(diff(sInputFiltered.TimeVector));
+    end
+
     % Handle ref_matrix_type
     if strcmp(ref_matrix_type, 'Brainstorm leadfield')
-        sStudy = bst_get('Study', iStudyChannel);
-        HeadModelFile = sStudy.HeadModel(sStudy.iHeadModel).FileName;
+        HeadModelFile = [];
+        
+        % Get Data Study and Channel Study
+        sStudyData = bst_get('Study', sInput.iStudy);
+        sStudyChan = bst_get('Study', iStudyChannel);
+
+        % Strategy 1: Active/Default HeadModel in Data Study
+        if ~isempty(sStudyData.iHeadModel) && ~isempty(sStudyData.HeadModel)
+             HeadModelFile = sStudyData.HeadModel(sStudyData.iHeadModel).FileName;
+        end
+        
+        % Strategy 2: Active/Default HeadModel in Channel Study
+        if isempty(HeadModelFile) && ~isempty(sStudyChan.iHeadModel) && ~isempty(sStudyChan.HeadModel)
+             HeadModelFile = sStudyChan.HeadModel(sStudyChan.iHeadModel).FileName;
+        end
+        
+        % Strategy 3: Any HeadModel in Data Study (First available)
+        if isempty(HeadModelFile) && ~isempty(sStudyData.HeadModel)
+            HeadModelFile = sStudyData.HeadModel(1).FileName;
+        end
+        
+        % Strategy 4: Any HeadModel in Channel Study (First available)
+        if isempty(HeadModelFile) && ~isempty(sStudyChan.HeadModel)
+            HeadModelFile = sStudyChan.HeadModel(1).FileName;
+        end
+        
+        if isempty(HeadModelFile)
+             bst_report('Error', sProcess, sInput, 'No head model found in Data or Channel studies (checked for defaults and any available models).');
+             return;
+        end
+        
         HeadModel = in_bst_headmodel(HeadModelFile, 0, 'Gain');
         
         % Filter Gain matrix to match EEG/MEG channels only
