@@ -159,6 +159,24 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     ChannelMatFiltered = ChannelMat;
     ChannelMatFiltered.Channel = ChannelMat.Channel(eeg_meg_idx);
     
+    % Detect signal type from channel labels
+    channel_types = {ChannelMatFiltered.Channel.Type};
+    eeg_count = sum(strcmp(channel_types, 'EEG'));
+    meg_count = sum(ismember(channel_types, {'MEG', 'MEG MAG', 'MEG GRAD'}));
+    
+    % Validate that channels are not mixed
+    if eeg_count > 0 && meg_count > 0
+        bst_report('Error', sProcess, sInput, 'Cannot process mixed EEG and MEG channels. They require different leadfield models. Please process them separately.');
+        return;
+    elseif eeg_count > 0
+        signal_type = 'eeg';
+    elseif meg_count > 0
+        signal_type = 'meg';
+    else
+        bst_report('Error', sProcess, sInput, 'No valid EEG or MEG channels detected.');
+        return;
+    end
+    
     % Create filtered input structure with only EEG/MEG channel data
     sInputFiltered = sInput;
     sInputFiltered.A = sInput.A(eeg_meg_idx, :);
@@ -207,10 +225,15 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         HeadModel = in_bst_headmodel(HeadModelFile, 0, 'Gain');
         
         % Filter Gain matrix to match EEG/MEG channels only
-        Gain_eeg = HeadModel.Gain(eeg_meg_idx, :);
+        Gain_filtered = HeadModel.Gain(eeg_meg_idx, :);
         
-        % Apply average reference to leadfield
-        Gain_avref = Gain_eeg - mean(Gain_eeg, 1);
+        % Apply average reference to leadfield (only for EEG)
+        if strcmp(signal_type, 'eeg')
+            Gain_avref = Gain_filtered - mean(Gain_filtered, 1);
+        else
+            % For MEG, skip average referencing
+            Gain_avref = Gain_filtered;
+        end
 
         % Compute channel covariance matrix
         ref_matrix_param = Gain_avref * Gain_avref';
@@ -223,7 +246,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     end
 
     % Run GEDAI
-    EEGclean = GEDAI(EEG, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param, parallel, visualize_artifacts, enova_threshold);
+    EEGclean = GEDAI(EEG, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param, parallel, visualize_artifacts, enova_threshold, signal_type);
     
     % Map cleaned EEG/MEG data back to original channel positions
     sOutput = sInput;

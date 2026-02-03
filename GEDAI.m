@@ -54,6 +54,10 @@
 %                                 Noise Variance (ENOVA). Epochs with ENOVA >
 %                                 ENOVA_threshold will be removed. Default is inf
 %                                 (no rejection).
+%
+%   signal_type                 - Type of signal: 'eeg' or 'meg'. Default is 'eeg'.
+%                                 For EEG, average referencing is applied.
+%                                 For MEG, average referencing is skipped.
 %    
 % Outputs:
 % 
@@ -92,7 +96,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold)
+function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold, signal_type)
 
 if nargin < 2 || isempty(artifact_threshold_type)
     artifact_threshold_type = 'auto';
@@ -115,10 +119,25 @@ end
 if nargin < 8 || isempty(ENOVA_threshold)
     ENOVA_threshold = inf; % If empty, set to infinity to disable rejection
 end
+if nargin < 9 || isempty(signal_type)
+    signal_type = 'eeg';
+end
+% Validate signal_type
+if ~ismember(lower(signal_type), {'eeg', 'meg'})
+    error('signal_type must be either ''eeg'' or ''meg''');
+end
+signal_type = lower(signal_type);
 
 p = fileparts(which('GEDAI'));
 addpath(fullfile(p, 'auxiliaries'));
-tStart = tic;  
+tStart = tic;
+
+% Display signal type being processed
+if strcmp(signal_type, 'eeg')
+    disp([newline 'GEDAI denoising of EEG data...']);
+else
+    disp([newline 'GEDAI denoising of MEG data...']);
+end  
 % -- Ensure epoch size results in an even number of samples (for broadband)
  broadband_epoch_size = 1; % Note: IN SECONDS (this is now only the DEFAULT for broadband)
 if rem(broadband_epoch_size*EEGin.srate, 2) ~= 0
@@ -140,7 +159,12 @@ end
 EEGin.data=double(EEGin.data);
 
 %% Pre-processing
-EEGavRef = GEDAI_nonRankDeficientAveRef(EEGin); % non rank-deficient average referencing (Makoto's plugin)
+if strcmp(signal_type, 'eeg')
+    EEGavRef = GEDAI_nonRankDeficientAveRef(EEGin); % non rank-deficient average referencing (Makoto's plugin)
+else
+    % For MEG, skip average referencing
+    EEGavRef = EEGin;
+end
 
 %% Create Reference Covariance Matrix (refCOV)
 if ~ischar(ref_matrix_type)
@@ -149,7 +173,7 @@ if ~ischar(ref_matrix_type)
 else
     switch ref_matrix_type
         case 'precomputed'
-        disp([newline 'GEDAI Leadfield model: BEM precomputed'])
+        disp([newline 'GEDAI Leadfield model: BEM precomputed for EEG'])
             L=load('fsavLEADFIELD_4_GEDAI.mat');
             electrodes_labels = {EEGin.chanlocs.labels};
             template_electrode_labels = {L.leadfield4GEDAI.electrodes.Name};
@@ -194,7 +218,7 @@ else
     
     else
         % 2. Leadfield Processing
-        disp([newline 'GEDAI Leadfield model: BEM interpolated'])
+        disp([newline 'GEDAI Leadfield model: BEM interpolated for EEG'])
         L = load('fsavLEADFIELD_4_GEDAI.mat');
         
         % The leadfield data needs to be average referenced before interpolation
@@ -520,8 +544,8 @@ tEnd = toc(tStart);
 if ~ischar(ref_matrix_type)
     ref_matrix_type = 'custom';
 end
-com = sprintf('EEG = GEDAI(EEG, ''%s'', %s,  %s, ''%s'', %d,  %d, %s, %s);', ...
-    artifact_threshold_type, num2str(epoch_size_in_cycles), num2str(lowcut_frequency), ref_matrix_type, parallel, visualize_artifacts, num2str(ENOVA_threshold), num2str(number_of_wavelet_bands));
+com = sprintf('EEG = GEDAI(EEG, ''%s'', %s,  %s, ''%s'', %d,  %d, %s, ''%s'');', ...
+    artifact_threshold_type, num2str(epoch_size_in_cycles), num2str(lowcut_frequency), ref_matrix_type, parallel, visualize_artifacts, num2str(ENOVA_threshold), signal_type);
 
 if visualize_artifacts
     EEGclean_for_vis = EEGclean;
