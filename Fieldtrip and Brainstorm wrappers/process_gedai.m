@@ -64,7 +64,7 @@ function sProcess = GetDescription() %#ok<DEFNU>
     % === Parallel processing
     sProcess.options.label3.Comment   = '<BR>';
     sProcess.options.label3.Type      = 'label';
-    sProcess.options.parallel.Comment = 'Use parallel processing';
+    sProcess.options.parallel.Comment = 'Use parallel processing (N.B. needs a lot more RAM)';
     sProcess.options.parallel.Type    = 'checkbox';
     sProcess.options.parallel.Value   = 1;
     % === Visualize artifacts

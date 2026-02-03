@@ -248,7 +248,7 @@ wavelet_type = 'haar';
 success = false;
 
 disp([newline 'Wavelet high-pass filtering > ' num2str(lowcut_frequency) 'Hz']);
-
+warning('off');
 % Attempt GPU Processing
 if gpuDeviceCount > 0
     try
