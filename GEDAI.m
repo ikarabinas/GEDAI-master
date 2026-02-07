@@ -134,9 +134,9 @@ tStart = tic;
 
 % Display signal type being processed
 if strcmp(signal_type, 'eeg')
-    disp([newline 'GEDAI denoising of EEG data...']);
+    disp([newline 'GEDAI denoising of EEG data: '   num2str(size(EEGin.data,1)) ' channels']);
 else
-    disp([newline 'GEDAI denoising of MEG data...']);
+    disp([newline 'GEDAI denoising of MEG data: ' num2str(size(EEGin.data,1)) ' channels']);
 end  
 % -- Ensure epoch size results in an even number of samples (for broadband)
  broadband_epoch_size = 1; % Note: IN SECONDS (this is now only the DEFAULT for broadband)
