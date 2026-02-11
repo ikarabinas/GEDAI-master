@@ -36,7 +36,7 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.OutputTypes = {'data', 'raw'};
     sProcess.nInputs     = 1;
     sProcess.nMinFiles   = 1;
-    sProcess.Description = 'https://github.com/neurotuning/GEDAI-master';
+    sProcess.Description = 'https://neuroimage.usc.edu/brainstorm/Tutorials/Gedai';
     sProcess.isSeparator = 1;
     % Definition of the options
     % === Artifact threshold type
