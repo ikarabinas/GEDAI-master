@@ -81,9 +81,16 @@ if ischar(artifact_threshold_type) && startsWith(artifact_threshold_type, 'auto'
     minThreshold = 0; maxThreshold = 12;
     
     % --- Optimization Method Switch ---
+    % Pre-calculate RefCOV eigenvectors for SENSAI
+    [evecs_Template_cov, evals_Template_cov] = eig(refCOV);
+    [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
+    top_PCs = 3;
+    evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:top_PCs));
+
+    % --- Optimization Method Switch ---
     switch optimization_type
         case 'parabolic'
-            [optimal_artifact_threshold] = SENSAI_fminbnd(minThreshold, maxThreshold, EEGdata_epoched, srate, epoch_size, refCOV, Eval, Evec, noise_multiplier);
+            [optimal_artifact_threshold] = SENSAI_fminbnd(minThreshold, maxThreshold, refCOV, Eval, Evec, noise_multiplier, COV, evecs_Template_cov);
         
         case 'grid' % Restored grid search functionality
             automatic_thresholding_step_size = 1/3;
@@ -96,13 +103,13 @@ if ischar(artifact_threshold_type) && startsWith(artifact_threshold_type, 'auto'
                 parfor threshold_index=1:length(AutomaticThresholdSweep)
                     artifact_threshold_iter = AutomaticThresholdSweep(threshold_index);
                     % Call SENSAI function
-                    [SIGNAL_subspace_similarity(threshold_index), NOISE_subspace_similarity(threshold_index), SENSAI_score(threshold_index)] = SENSAI(EEGdata_epoched, srate, epoch_size, artifact_threshold_iter, refCOV, Eval, Evec, noise_multiplier);
+                    [SIGNAL_subspace_similarity(threshold_index), NOISE_subspace_similarity(threshold_index), SENSAI_score(threshold_index)] = SENSAI(artifact_threshold_iter, refCOV, Eval, Evec, noise_multiplier, COV, evecs_Template_cov);
                 end
             else
                 for threshold_index=1:length(AutomaticThresholdSweep)
                     artifact_threshold_iter = AutomaticThresholdSweep(threshold_index);
                     % Call SENSAI function
-                    [SIGNAL_subspace_similarity(threshold_index), NOISE_subspace_similarity(threshold_index), SENSAI_score(threshold_index)] = SENSAI(EEGdata_epoched, srate, epoch_size, artifact_threshold_iter, refCOV, Eval, Evec, noise_multiplier);
+                    [SIGNAL_subspace_similarity(threshold_index), NOISE_subspace_similarity(threshold_index), SENSAI_score(threshold_index)] = SENSAI(artifact_threshold_iter, refCOV, Eval, Evec, noise_multiplier, COV, evecs_Template_cov);
                 end
             end
             [~, SENSAI_index] = max(SENSAI_score);
@@ -160,5 +167,13 @@ cleaned_data = cleaned_data(:, 1:pnts_original);
 artifacts_data = artifacts_data(:, 1:pnts_original);
 
 %% Calculate final SENSAI score
-[~, ~, SENSAI_score] = SENSAI(EEGdata_epoched, srate, epoch_size, artifact_threshold_out, refCOV, Eval, Evec, 1);
+%% Calculate final SENSAI score
+% Need evecs_Template_cov again
+if ~exist('evecs_Template_cov', 'var')
+    [evecs_Template_cov, evals_Template_cov] = eig(refCOV);
+    [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
+    top_PCs = 3;
+    evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:top_PCs));
+end
+[~, ~, SENSAI_score] = SENSAI(artifact_threshold_out, refCOV, Eval, Evec, 1, COV, evecs_Template_cov);
 end

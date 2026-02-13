@@ -1,54 +1,84 @@
-% [Generalized Eigenvalue De-Artifacting Intrument (GEDAI)]
-% PolyForm Noncommercial License 1.0.0
-% https://polyformproject.org/licenses/noncommercial/1.0.0
+function [SIGNAL_subspace_similarity, NOISE_subspace_similarity, SENSAI_score] = SENSAI(artifact_threshold, refCOV, Eval, Evec, noise_multiplier, cov_total, evecs_Template_cov, varargin)
+%   Evaluates GEDAI cleaning quality for a given threshold.
+%%   Creative Commons License
 %
-% Copyright (C) [2025] Tomas Ros & Abele Michela
+%   Credits:  Tomas Ros & Abele Michela 
 %             NeuroTuning Lab [ https://github.com/neurotuning ]
 %             Center for Biomedical Imaging
 %             University of Geneva
 %             Switzerland
 %
-% For any questions, please contact:
-% dr.t.ros@gmail.com
+% Redistribution and use in source and binary forms, with or without
+% modification, are permitted provided that the following conditions are met:
+%
+% 1. Redistributions of source code must retain the above copyright notice,
+% this list of conditions and the following disclaimer.
+%
+% 2. Redistributions in binary form must reproduce the above copyright notice,
+% this list of conditions and the following disclaimer in the documentation
+% and/or other materials provided with the distribution.
+%
+% 3. Neither the name of the copyright holder nor the names of its CONTRIBUTORS
+% may be used to endorse or promote products derived from this software without
+% specific prior written permission.
+%
+% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+% THE POSSIBILITY OF SUCH DAMAGE.
 
-function [SIGNAL_subspace_similarity, NOISE_subspace_similarity, SENSAI_score] = SENSAI(EEGdata_epoched, srate, epoch_size, artifact_threshold, refCOV, Eval, Evec, noise_multiplier)
-
-[EEGout_data, EEG_artifacts_data] = clean_EEG(EEGdata_epoched, srate, epoch_size, artifact_threshold, refCOV, Eval, Evec);
+[cov_signal_epoched, cov_noise_epoched] = clean_SENSAI(artifact_threshold, refCOV, Eval, Evec, cov_total, varargin{:});
 
 %% Estimate Signal Quality
 top_PCs = 3;
 num_chans = size(refCOV, 1);
-epoch_samples = srate * epoch_size;
 
-% Top eigenvectors of reference covariance
-[evecs_Template_cov, evals_Template_cov] = eig(refCOV);
-[~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
-evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:top_PCs));
+% Top eigenvectors of reference covariance (Calculated outside and passed in)
+% [evecs_Template_cov, evals_Template_cov] = eig(refCOV);
+% [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
+% evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:top_PCs));
 
-% Epoch cleaned and artifact data
-EEGout_epoched = reshape(EEGout_data, num_chans, epoch_samples, []);
-residual_epoched = reshape(EEG_artifacts_data, num_chans, epoch_samples, []);
-num_epochs = size(EEGout_epoched, 3);
+num_epochs = size(cov_signal_epoched, 3);
 
 SIGNAL_subspace_similarity_distribution = zeros(1, num_epochs);
 NOISE_subspace_similarity_distribution = zeros(1, num_epochs);
 
+% Pre-allocate eigenvalue storage for RMT check
+all_signal_evals = zeros(num_chans, num_epochs);
+all_noise_evals = zeros(num_chans, num_epochs);
+
 for epoch = 1:num_epochs
     % SIGNAL SUBSPACE similarity
-    cov_EEGout = cov(EEGout_epoched(:,:,epoch)');
+    cov_EEGout = cov_signal_epoched(:,:,epoch);
     [evecs_EEGout, evals_EEGout] = eig(cov_EEGout);
+    all_signal_evals(:, epoch) = diag(evals_EEGout); % Store for RMT
     [~, sidxS_EEGout] = sort(diag(evals_EEGout), 'descend');
     evecs_EEGout = evecs_EEGout(:, sidxS_EEGout(1:top_PCs));
-    SIGNAL_subspace_angles = subspace_angles(evecs_EEGout, evecs_Template_cov); 
-    SIGNAL_subspace_similarity_distribution(epoch) = prod(cos(SIGNAL_subspace_angles));
+    [~, SIGNAL_cos_theta] = subspace_angles(evecs_EEGout, evecs_Template_cov); 
+    SIGNAL_subspace_similarity_distribution(epoch) = prod(SIGNAL_cos_theta);
+
+    % SIGNAL_theta_max= subspace(evecs_EEGout, evecs_Template_cov); 
+    % SIGNAL_subspace_similarity_distribution(epoch) = 1 - (SIGNAL_theta_max / (pi/2));
+
 
     % NOISE SUBSPACE similarity
-    cov_residual = cov(residual_epoched(:,:,epoch)');
+    cov_residual = cov_noise_epoched(:,:,epoch);
     [evecs_residual, evals_residual] = eig(cov_residual);
+    all_noise_evals(:, epoch) = diag(evals_residual); % Store for RMT
     [~, sidxS_residual] = sort(diag(evals_residual), 'descend');
     evecs_residual = evecs_residual(:, sidxS_residual(1:top_PCs));
-    NOISE_subspace_angles = subspace_angles(evecs_residual, evecs_Template_cov); 
-    NOISE_subspace_similarity_distribution(epoch) = prod(cos(NOISE_subspace_angles));
+    [~, NOISE_cos_theta] = subspace_angles(evecs_residual, evecs_Template_cov); 
+    NOISE_subspace_similarity_distribution(epoch) = prod(NOISE_cos_theta);
+
+    % NOISE_theta_max= subspace(evecs_residual, evecs_Template_cov); 
+    % NOISE_subspace_similarity_distribution(epoch) = 1 - (NOISE_theta_max / (pi/2));
 end
 
 %% Compute SENSAI Score
