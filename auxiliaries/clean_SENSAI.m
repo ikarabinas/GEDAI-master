@@ -60,15 +60,8 @@ else
     correction_factor = 1.00;
     T1 = correction_factor * (105 - artifact_threshold_in) / 100;
     
-    %% Defining artifact threshold with Probability Integral Transform (PIT) fitting
-    original_data = unique(log_Eig_val_all);
-    [f,x] = ecdf(original_data);
-    [unique_x, ia, ~] = unique(original_data);
-    unique_f = f(ia);
-    transformed_data = interp1(unique_x, unique_f, original_data, 'linear', 'extrap');
-    upper_PIT_threshold = 0.95;
-    outliers = original_data(transformed_data > upper_PIT_threshold);
-    Treshold1 = T1 * min(outliers);
+    %% Defining artifact threshold with percentile fitting
+    Treshold1 = T1 * prctile(log_Eig_val_all, 95);
 end
 
 %% Compute Regularized Reference Covariance
@@ -126,10 +119,28 @@ for i = 1:num_epochs
         % cov_noise_epoched(:,:,i) stays 0
     end
 
-    % Signal Covariance
-    % Signal = Total - Noise
-    cov_signal_epoched(:,:,i) = cov_total(:,:,i) - cov_noise_epoched(:,:,i);
+    % Proper Signal Covariance Estimation
+    good_indices = ~bad_indices;
     
+    if any(good_indices)
+        % Signal Covariance reconstruction using good components
+        % Similar logic to noise reconstruction above
+        
+        % 1. Get relevant columns of Evec (N x K_good)
+        Evec_good = Evec(:, good_indices, i);
+        
+        % 2. Compute rows of V_inv corresponding to good indices (K_good x N)
+        V_good_rows = Evec_good' * refCOV_reg; 
+        
+        d_good = current_evals(good_indices);
+        
+        % 3. Reconstruction: V_good_rows' * (V_good_rows .* d_good)
+        cov_signal_epoched(:,:,i) = V_good_rows' * (V_good_rows .* d_good);
+        
+    else
+        % If no good components, signal covariance remains zero
+    end
+
     % Enforce symmetry to allow fast symmetric eig solver downstream
     cov_noise_epoched(:,:,i) = (cov_noise_epoched(:,:,i) + cov_noise_epoched(:,:,i)') / 2;
     cov_signal_epoched(:,:,i) = (cov_signal_epoched(:,:,i) + cov_signal_epoched(:,:,i)') / 2;
