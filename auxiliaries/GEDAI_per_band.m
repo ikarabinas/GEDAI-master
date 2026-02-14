@@ -11,7 +11,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [cleaned_data, artifacts_data, SENSAI_score, artifact_threshold_out] = GEDAI_per_band(eeg_data, srate, chanlocs, artifact_threshold_type, epoch_size, refCOV, optimization_type, parallel)
+function [cleaned_data, artifacts_data, SENSAI_score, artifact_threshold_out, ENOVA] = GEDAI_per_band(eeg_data, srate, chanlocs, artifact_threshold_type, epoch_size, refCOV, optimization_type, parallel)
 
 if isempty(eeg_data)
     error('Cannot process empty data');
@@ -177,4 +177,14 @@ if ~exist('evecs_Template_cov', 'var')
     evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:top_PCs));
 end
 [~, ~, SENSAI_score] = SENSAI(artifact_threshold_out, refCOV, Eval, Evec, 1, COV, evecs_Template_cov);
+
+% Calculate global ENOVA for this band
+original_data = cleaned_data + artifacts_data;
+var_original = var(original_data(:));
+var_noise = var(artifacts_data(:));
+if var_original > 0
+    ENOVA = var_noise / var_original;
+else
+    ENOVA = 0;
+end
 end

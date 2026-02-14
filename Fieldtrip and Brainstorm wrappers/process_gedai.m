@@ -444,6 +444,10 @@ function EEG = brainstorm2eeglab(sInput, ChannelMat)
             EEG.chanlocs(i).X = ChannelMat.Channel(i).Loc(1) * 1000; % Convert to mm
             EEG.chanlocs(i).Y = ChannelMat.Channel(i).Loc(2) * 1000; % Convert to mm
             EEG.chanlocs(i).Z = ChannelMat.Channel(i).Loc(3) * 1000; % Convert to mm
+        else
+            EEG.chanlocs(i).X = NaN; 
+            EEG.chanlocs(i).Y = NaN; 
+            EEG.chanlocs(i).Z = NaN; 
         end
         EEG.chanlocs(i).type = ChannelMat.Channel(i).Type;
     end

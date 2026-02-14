@@ -61,7 +61,7 @@ for epoch = 1:num_epochs
     all_signal_evals(:, epoch) = diag(evals_signal); % Store for RMT
     [~, sidxS_EEGout] = sort(diag(evals_signal), 'descend');
     evecs_signal = evecs_signal(:, sidxS_EEGout(1:top_PCs));
-    [SIGNAL_cos_theta] = subspace_angles(evecs_signal, evecs_Template_cov); 
+    [SIGNAL_cos_theta] = subspace(evecs_signal, evecs_Template_cov); 
     SIGNAL_subspace_similarity_distribution(epoch) = prod(SIGNAL_cos_theta);
 
     % NOISE SUBSPACE similarity
