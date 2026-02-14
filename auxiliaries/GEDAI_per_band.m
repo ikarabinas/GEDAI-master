@@ -59,7 +59,8 @@ end
 COV(:,:,N_epochs) = cov(EEGdata_epoched(:,:,N_epochs)');
 %% Generalized Eigendecomposition (GEVD)
 regularization_lambda = 0.05;
-refCOV_reg = (1-regularization_lambda)*refCOV + regularization_lambda*mean(eig(refCOV))*eye(N_EEG_electrodes, 'like', refCOV);
+reg_val = trace(refCOV) / N_EEG_electrodes;
+refCOV_reg = (1-regularization_lambda)*refCOV + regularization_lambda*reg_val*eye(N_EEG_electrodes, 'like', refCOV);
 Evec = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs, 'like', eeg_data);
 Eval = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs, 'like', eeg_data);
 Evec_2 = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs-1, 'like', eeg_data);
