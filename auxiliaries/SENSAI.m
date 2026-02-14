@@ -56,29 +56,23 @@ all_noise_evals = zeros(num_chans, num_epochs);
 
 for epoch = 1:num_epochs
     % SIGNAL SUBSPACE similarity
-    cov_EEGout = cov_signal_epoched(:,:,epoch);
-    [evecs_EEGout, evals_EEGout] = eig(cov_EEGout);
-    all_signal_evals(:, epoch) = diag(evals_EEGout); % Store for RMT
-    [~, sidxS_EEGout] = sort(diag(evals_EEGout), 'descend');
-    evecs_EEGout = evecs_EEGout(:, sidxS_EEGout(1:top_PCs));
-    [~, SIGNAL_cos_theta] = subspace_angles(evecs_EEGout, evecs_Template_cov); 
+    cov_signal = cov_signal_epoched(:,:,epoch);
+    [evecs_signal, evals_signal] = eig(cov_signal);
+    all_signal_evals(:, epoch) = diag(evals_signal); % Store for RMT
+    [~, sidxS_EEGout] = sort(diag(evals_signal), 'descend');
+    evecs_signal = evecs_signal(:, sidxS_EEGout(1:top_PCs));
+    [SIGNAL_cos_theta] = subspace_angles(evecs_signal, evecs_Template_cov); 
     SIGNAL_subspace_similarity_distribution(epoch) = prod(SIGNAL_cos_theta);
 
-    % SIGNAL_theta_max= subspace(evecs_EEGout, evecs_Template_cov); 
-    % SIGNAL_subspace_similarity_distribution(epoch) = 1 - (SIGNAL_theta_max / (pi/2));
-
-
     % NOISE SUBSPACE similarity
-    cov_residual = cov_noise_epoched(:,:,epoch);
-    [evecs_residual, evals_residual] = eig(cov_residual);
-    all_noise_evals(:, epoch) = diag(evals_residual); % Store for RMT
-    [~, sidxS_residual] = sort(diag(evals_residual), 'descend');
-    evecs_residual = evecs_residual(:, sidxS_residual(1:top_PCs));
-    [~, NOISE_cos_theta] = subspace_angles(evecs_residual, evecs_Template_cov); 
+    cov_noise = cov_noise_epoched(:,:,epoch);
+    [evecs_noise, evals_noise] = eig(cov_noise);
+    all_noise_evals(:, epoch) = diag(evals_noise); % Store for RMT
+    [~, sidxS_residual] = sort(diag(evals_noise), 'descend');
+    evecs_noise = evecs_noise(:, sidxS_residual(1:top_PCs));
+    [NOISE_cos_theta] = subspace_angles(evecs_noise, evecs_Template_cov); 
     NOISE_subspace_similarity_distribution(epoch) = prod(NOISE_cos_theta);
 
-    % NOISE_theta_max= subspace(evecs_residual, evecs_Template_cov); 
-    % NOISE_subspace_similarity_distribution(epoch) = 1 - (NOISE_theta_max / (pi/2));
 end
 
 %% Compute SENSAI Score

@@ -59,15 +59,9 @@ else
     %% Artifacting multiplication factor T1
     correction_factor = 1.00;
 T1 = correction_factor * (105 - artifact_threshold_in) / 100;
-%% Defining artifact threshold with Probability Integral Transform (PIT) fitting
-original_data = unique(log_Eig_val_all);
-[f,x] = ecdf(original_data);
-[unique_x, ia, ~] = unique(original_data);
-unique_f = f(ia);
-transformed_data = interp1(unique_x, unique_f, original_data, 'linear', 'extrap');
-upper_PIT_threshold = 0.95;
-outliers = original_data(transformed_data > upper_PIT_threshold);
-Treshold1 = T1 * min(outliers);
+
+%% Defining artifact threshold
+Treshold1 = T1 * prctile(log_Eig_val_all,95);
 end
 
 %% Compute Regularized Reference Covariance

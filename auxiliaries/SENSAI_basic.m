@@ -48,15 +48,15 @@ for epoch = 1:num_epochs
     [evecs_signal_EEG, evals_signal_EEG] = eig(cov_signal_EEG);
     [~, sidxS_signal_EEG] = sort(diag(evals_signal_EEG), 'descend');
     evecs_signal_EEG = evecs_signal_EEG(:, sidxS_signal_EEG(1:top_PCs));
-    SIGNAL_subspace_angles = subspace_angles(evecs_signal_EEG, evecs_Template_cov);
-    SIGNAL_subspace_similarity_distribution(epoch) = prod(cos(SIGNAL_subspace_angles));
+    [SIGNAL_cos_theta] = subspace_angles(evecs_signal_EEG, evecs_Template_cov); 
+    SIGNAL_subspace_similarity_distribution(epoch) = prod(SIGNAL_cos_theta);
     % NOISE SUBSPACE
     cov_noise = cov(noise_EEG_epoched(:,:,epoch)');
     [evecs_noise, evals_noise] = eig(cov_noise);
     [~, sidxS_noise] = sort(diag(evals_noise), 'descend');
     evecs_noise = evecs_noise(:, sidxS_noise(1:top_PCs));
-    NOISE_subspace_angles = subspace_angles(evecs_noise, evecs_Template_cov);
-    NOISE_subspace_similarity_distribution(epoch) = prod(cos(NOISE_subspace_angles));
+    [NOISE_cos_theta] = subspace_angles(evecs_noise, evecs_Template_cov); 
+    NOISE_subspace_similarity_distribution(epoch) = prod(NOISE_cos_theta);
 
     % Explained Noise Variance (ENOVA)
     original_epoch = signal_EEG_epoched(:,:,epoch) + noise_EEG_epoched(:,:,epoch);
