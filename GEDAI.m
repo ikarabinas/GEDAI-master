@@ -684,8 +684,8 @@ end
 % Calculate final SENSAI score (after potential epoch rejection)
 [SENSAI_score, ~, ~, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(double(EEGclean.data), double(EEGartifacts.data), EEGavRef.srate, broadband_epoch_size, refCOV, noise_multiplier);
 
-disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
-disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
+% disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
+% disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
 
 % Use original epoch count for rejection statistics (before rejection)
 num_rejected = length(epochs_to_remove);
@@ -694,14 +694,14 @@ if original_total_epochs > 0
 else
     percentage_rejected = 0;
 end
-disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(original_total_epochs) ' epochs)']);
+% disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(original_total_epochs) ' epochs)']);
 
 % --- Summarized Output Table (including ENOVA) ---
 disp(' '); 
 left_margin = '  '; 
 header1 = 'Wavelet Center Freq (Hz)';
 header2 = 'Epoch Size (s)';
-header3 = 'ENOVA';
+header3 = 'ENOVA (%)';
 
 % Combine frequencies and epochs for display, including Broadband
 % Broadband is index 1 in the arrays, usually displayed first
@@ -722,7 +722,7 @@ enova_str_cell = cell(1, num_bands_to_process + 1);
 % ENOVA_per_band contains [Broadband, Band1, Band2, ...] if processed sequentially
 % Ensure correct indexing
 for i = 1:length(ENOVA_per_band)
-    enova_str_cell{i} = num2str(ENOVA_per_band(i), '%.3f');
+    enova_str_cell{i} = num2str(round(ENOVA_per_band(i) * 100), '%.0f');
 end
 
 % Determine column widths
@@ -744,6 +744,9 @@ for i = 1:length(freq_str_cell)
 end
 disp(' ');
 
+disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
+disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
+disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(original_total_epochs) ' epochs)']);
 disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds' newline]);
 
 % Store GEDAI variables in EEG.etc.GEDAI
