@@ -399,6 +399,9 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     sInput.A = sOutput.A;  % Use the full channel data with cleaned EEG
     
     % Update Comment logic
+    % Force DataType to 'recordings' (imported data) to ensure it stays in the same study
+    sInput.DataType = 'recordings';
+    
     new_duration = sInput.TimeVector(end) - sInput.TimeVector(1);
     
     % Get the base comment
@@ -417,7 +420,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     end
     
     % Explicitly set the full Comment string to ensure it appears
-    sInput.Comment = [current_comment, ' | ', gedai_params];
+    sInput.Comment = ['Cleaned | ', current_comment, ' | ', gedai_params];
     
     % Clear CommentTag to avoid duplication if Brainstorm tries to auto-append
     sInput.CommentTag = []; 
@@ -440,6 +443,10 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         % 2. Create Artifacts structure
         FileMatArtifacts = FileMat;
         
+        % FIX: Ensure it is treated as imported data, not raw link
+        FileMatArtifacts.DataType = 'recordings';
+        FileMatArtifacts.Time = sInput.TimeVector;
+
         % 3. Update data field .F (rows=channels, cols=time)
         % Initialize F with zeros (same size as input, type double or single based on context)
         % This ensures F is a numeric matrix even if FileMat came from a raw link (where F might be struct/object)
@@ -451,7 +458,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         FileMatArtifacts.F(eeg_meg_idx, :) = EEGartifacts.data;
         
         % 4. Update Comment
-        FileMatArtifacts.Comment = ['Artifacts | ', sInput.Comment];
+        FileMatArtifacts.Comment = ['Artifacts | ', current_comment, ' | ', gedai_params];
         
         % 5. Clear History to avoid confusion (optional, but good practice)
         % FileMatArtifacts.History = []; 
