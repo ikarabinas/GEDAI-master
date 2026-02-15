@@ -682,20 +682,20 @@ header3 = 'ENOVA (%)';
 freq_str_cell = cell(1, num_bands_to_process + 1);
 freq_str_cell{1} = 'Broadband';
 for i = 1:num_bands_to_process
-    freq_str_cell{i+1} = num2str(center_frequencies(i), '%.2g');
+    freq_str_cell{i+1} = [num2str(center_frequencies(i), '%.2g') ' Hz'];
 end
 
 epoch_str_cell = cell(1, num_bands_to_process + 1);
-epoch_str_cell{1} = num2str(broadband_epoch_size, '%.2g');
+epoch_str_cell{1} = [num2str(broadband_epoch_size, '%.2g') ' s'];
 for i = 1:num_bands_to_process
-    epoch_str_cell{i+1} = num2str(epoch_sizes_per_wavelet_band(i), '%.2g');
+    epoch_str_cell{i+1} = [num2str(epoch_sizes_per_wavelet_band(i), '%.2g') ' s'];
 end
 
 enova_str_cell = cell(1, num_bands_to_process + 1);
 % ENOVA_per_band contains [Broadband, Band1, Band2, ...] if processed sequentially
 % Ensure correct indexing
 for i = 1:length(ENOVA_per_band)
-    enova_str_cell{i} = num2str(round(ENOVA_per_band(i) * 100), '%.0f');
+    enova_str_cell{i} = [num2str(round(ENOVA_per_band(i) * 100), '%.0f') ' %'];
 end
 
 % Determine column widths
@@ -718,7 +718,7 @@ end
 disp(' ');
 
 disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);
-disp(['Mean ENOVA: ' num2str(round(mean_ENOVA, 2, 'significant'))]);
+disp(['Mean ENOVA: ' num2str(round(mean_ENOVA*100, 2, 'significant')) ' %']);
 disp(['Bad epochs rejected: ' num2str(round(percentage_rejected,1)) ' % (' num2str(num_rejected) ' out of ' num2str(original_total_epochs) ' epochs)']);
 disp(['Elapsed time: ' num2str(round(tEnd, 2, 'significant')) ' seconds' newline]);
 

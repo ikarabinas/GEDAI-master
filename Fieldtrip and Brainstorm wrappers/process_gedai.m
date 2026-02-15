@@ -191,7 +191,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         % Debug output - show unique channel types
         unique_types = unique(channel_types);
         fprintf('GEDAI> Unique channel types found: %s\\n', strjoin(unique_types, ', '));
-        fprintf('GEDAI> Channel type counts: %d MEG MAG, %d MEG GRAD, %d generic MEG (Total: %d)\\n', mag_count, grad_count, meg_generic_count, meg_count);
+        fprintf('GEDAI> Channel type counts: %d MEG MAG, %d MEG GRAD, %d generic MEG (Total: %d)', mag_count, grad_count, meg_generic_count, meg_count);
         
         process_mag_grad_separately = (mag_count > 0 && grad_count > 0);
     else
