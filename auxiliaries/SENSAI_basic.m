@@ -11,20 +11,31 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [SENSAI_score, SIGNAL_subspace_similarity, NOISE_subspace_similarity, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(signal_data, noise_data, srate, epoch_size, refCOV, NOISE_multiplier)
+function [SENSAI_score, SIGNAL_subspace_similarity, NOISE_subspace_similarity, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(signal_data, noise_data, srate, epoch_size, refCOV, NOISE_multiplier, signal_type)
 
     %   Calculates the Signal & Noise Subspace Alignment Index (SENSAI) from raw EEG data
     
 regularization_lambda = 0.05;
-refCOV_reg = (1-regularization_lambda)*refCOV + regularization_lambda*mean(eig(refCOV))*eye(length(refCOV));
+reg_val = trace(refCOV) / length(refCOV);
+refCOV_reg = (1-regularization_lambda)*refCOV + regularization_lambda*reg_val*eye(length(refCOV), 'like', refCOV);
+
 %% Estimate Signal Quality
-top_PCs = 3;
+if nargin < 7 || isempty(signal_type)
+    signal_type = 'eeg';
+end
+
+if strcmpi(signal_type, 'meg')
+    refCOV_top_PCs = 5;
+else
+    refCOV_top_PCs = 3;
+end
+top_PCs = 3; % Always keep subspace comparison at 3 PCs 
 num_chans = size(refCOV, 1);
 epoch_samples = srate * epoch_size;
 % Top eigenvectors of refCOV subspace
 [evecs_Template_cov, evals_Template_cov] = eig(refCOV_reg);
 [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
-evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:top_PCs));
+evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:refCOV_top_PCs));
 
 % --- FIX START: Truncate data to contain a whole number of epochs ---
 pnts = size(signal_data, 2);

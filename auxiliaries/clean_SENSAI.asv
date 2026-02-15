@@ -61,7 +61,7 @@ else
 T1 = correction_factor * (105 - artifact_threshold_in) / 100;
 
 %% Defining artifact threshold
-percentile_threshold = 98;
+percentile_threshold = 9;
 Treshold1 = T1 * prctile(log_Eig_val_all, percentile_threshold);
 end
 
