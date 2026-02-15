@@ -135,7 +135,7 @@ tStart = tic;
 % Display signal type being processed
 if strcmp(signal_type, 'eeg')
     disp([newline 'GEDAI denoising of EEG data: '   num2str(size(EEGin.data,1)) ' channels']);
-else
+elseif strcmp(signal_type, 'meg')
     disp([newline 'GEDAI denoising of MEG data: ' num2str(size(EEGin.data,1)) ' channels']);
 end  
 % -- Ensure epoch size results in an even number of samples (for broadband)
@@ -170,6 +170,12 @@ end
 if ~ischar(ref_matrix_type)
     refCOV = ref_matrix_type; % Use custom covariance matrix
     disp([newline 'Using custom covariance matrix']);
+
+    % if strcmp(signal_type, 'meg')
+    %  disp([newline 'Normalizing MEG gram matrix']);
+    % refCOV=corrcov(refCOV);
+    % end
+
  
 else
     switch ref_matrix_type
@@ -682,6 +688,7 @@ if ~isempty(regions)
 end
 
 % Calculate final SENSAI score (after potential epoch rejection)
+% refCOV_top_PCs=4
 [SENSAI_score, ~, ~, mean_ENOVA, ENOVA_per_epoch] = SENSAI_basic(double(EEGclean.data), double(EEGartifacts.data), EEGavRef.srate, broadband_epoch_size, refCOV, noise_multiplier);
 
 % disp([newline 'SENSAI score: ' num2str(round(SENSAI_score, 2, 'significant'))]);

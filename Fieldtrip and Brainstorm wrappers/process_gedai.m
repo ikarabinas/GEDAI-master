@@ -71,6 +71,10 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.visualize_artifacts.Comment = 'Visualize artifacts';
     sProcess.options.visualize_artifacts.Type    = 'checkbox';
     sProcess.options.visualize_artifacts.Value   = 0;
+    % === Save artifacts data
+    sProcess.options.save_artifacts.Comment = 'Save artifacts data';
+    sProcess.options.save_artifacts.Type    = 'checkbox';
+    sProcess.options.save_artifacts.Value   = 0;
     sProcess.isSeparator = 1;
 
     % === ENOVA bad epoch rejection
@@ -88,7 +92,7 @@ end
 
 
 %% ===== GET OPTIONS =====
-function [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, enova_threshold] = GetOptions(sProcess)
+function [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, enova_threshold, save_artifacts] = GetOptions(sProcess)
     % Artifact threshold type
     artifact_threshold_type = sProcess.options.artifact_threshold_type.Value;
     % Epoch size in cycles
@@ -108,6 +112,12 @@ function [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_m
     parallel = sProcess.options.parallel.Value;
     % Visualize artifacts
     visualize_artifacts = sProcess.options.visualize_artifacts.Value;
+    % Save artifacts data
+    if isfield(sProcess.options, 'save_artifacts') && isfield(sProcess.options.save_artifacts, 'Value')
+        save_artifacts = sProcess.options.save_artifacts.Value;
+    else
+        save_artifacts = 0;
+    end
     % ENOVA bad epoch rejection
     if sProcess.options.reject_by_enova.Value
         enova_threshold = sProcess.options.enova_threshold.Value{1};
@@ -119,7 +129,7 @@ end
 
 %% ===== FORMAT COMMENT =====
 function Comment = FormatComment(sProcess) %#ok<DEFNU>
-    [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, ~, ~, enova_threshold] = GetOptions(sProcess);
+    [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, ~, ~, enova_threshold, ~] = GetOptions(sProcess);
     Comment = ['GEDAI: ' artifact_threshold_type ', ' num2str(epoch_size_in_cycles) ' cycles, ' num2str(lowcut_frequency) ' Hz, ' ref_matrix_type];
     if ~isempty(enova_threshold)
         Comment = [Comment, ', ENOVA=' num2str(enova_threshold)];
@@ -141,7 +151,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         unloadPlug = 1;
     end
     % Get options
-    [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, enova_threshold] = GetOptions(sProcess);
+    [artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, enova_threshold, save_artifacts] = GetOptions(sProcess);
     
     % Get channel file for study
     [sChannel, iStudyChannel] = bst_get('ChannelForStudy', sInput.iStudy);
@@ -273,7 +283,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         end
         
         % Run GEDAI for MAG channels
-        EEGclean_MAG = GEDAI(EEG_MAG, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param_MAG, parallel, visualize_artifacts, enova_threshold, signal_type);
+        [EEGclean_MAG, EEGartifacts_MAG] = GEDAI(EEG_MAG, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param_MAG, parallel, visualize_artifacts, enova_threshold, signal_type);
         
         % ===== Process GRAD channels =====
         fprintf('GEDAI> Processing %d GRAD channels...\n', length(grad_idx_in_filtered));
@@ -299,7 +309,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         end
         
         % Run GEDAI for GRAD channels
-        EEGclean_GRAD = GEDAI(EEG_GRAD, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param_GRAD, parallel, visualize_artifacts, enova_threshold, signal_type);
+        [EEGclean_GRAD, EEGartifacts_GRAD] = GEDAI(EEG_GRAD, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param_GRAD, parallel, visualize_artifacts, enova_threshold, signal_type);
         
         % ===== Combine MAG and GRAD results =====
         % Create combined EEG structure
@@ -308,6 +318,11 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         % Reconstruct data in original channel order
         EEGclean.data(mag_idx_in_filtered, :) = EEGclean_MAG.data;
         EEGclean.data(grad_idx_in_filtered, :) = EEGclean_GRAD.data;
+        
+        % Combine artifacts
+        EEGartifacts = EEGclean;
+        EEGartifacts.data(mag_idx_in_filtered, :) = EEGartifacts_MAG.data;
+        EEGartifacts.data(grad_idx_in_filtered, :) = EEGartifacts_GRAD.data;
         
         % Handle epoch rejection: combine masks from both MAG and GRAD
         if isfield(EEGclean_MAG.etc, 'GEDAI') && isfield(EEGclean_MAG.etc.GEDAI, 'samples_to_keep') && ...
@@ -360,7 +375,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         end
 
         % Run GEDAI
-        EEGclean = GEDAI(EEG, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param, parallel, visualize_artifacts, enova_threshold, signal_type);
+        [EEGclean, EEGartifacts] = GEDAI(EEG, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_param, parallel, visualize_artifacts, enova_threshold, signal_type);
     end
     
     % Map cleaned EEG/MEG data back to original channel positions
@@ -414,6 +429,39 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     % if unloadPlug
     %     bst_plugin('Unload', 'gedai');
     % end
+    % Create Artifacts output file
+    % Create Artifacts output file MANUALLY because 'Filter' process type 
+    % does not support returning multiple files in sInput array.
+    
+    if save_artifacts
+        % 1. Load the FULL data structure (sInput only has a subset)
+        FileMat = in_bst_data(sInput.FileName);
+        
+        % 2. Create Artifacts structure
+        FileMatArtifacts = FileMat;
+        
+        % 3. Update data field .F (rows=channels, cols=time)
+        % Only update the EEG/MEG channels where we have artifact data
+        FileMatArtifacts.F(eeg_meg_idx, :) = EEGartifacts.data;
+        
+        % 4. Update Comment
+        FileMatArtifacts.Comment = ['Artifacts | ', sInput.Comment];
+        
+        % 5. Clear History to avoid confusion (optional, but good practice)
+        % FileMatArtifacts.History = []; 
+        
+        % 6. Generate new filename
+        NewFileName = bst_process('GetNewFilename', fileparts(sInput.FileName), 'data_gedai_artifacts');
+        
+        % 7. Save file
+        bst_save(NewFileName, FileMatArtifacts, 'v6');
+        
+        % 8. Register in database
+        db_add_data(sInput.iStudy, NewFileName, FileMatArtifacts);
+    end
+    
+    % Return ONLY the cleaned data structure as expected by Brainstorm for 'Filter'
+    % sInput already contains the cleaned data in .A
 end
 
 %% ===== HELPER FUNCTIONS =====
