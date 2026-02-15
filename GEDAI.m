@@ -241,41 +241,6 @@ else
     end
 end
 
-% Sanitize chanlocs for plotting
-plot_chanlocs = EEGin.chanlocs;
-try
-    if isfield(plot_chanlocs, 'X')
-        for i = 1:length(plot_chanlocs)
-            % Ensure scalar doubles and set empty to NaN
-            if isempty(plot_chanlocs(i).X) || numel(plot_chanlocs(i).X) > 1, plot_chanlocs(i).X = NaN; end
-            if isempty(plot_chanlocs(i).Y) || numel(plot_chanlocs(i).Y) > 1, plot_chanlocs(i).Y = NaN; end
-            if isempty(plot_chanlocs(i).Z) || numel(plot_chanlocs(i).Z) > 1, plot_chanlocs(i).Z = NaN; end
-            plot_chanlocs(i).X = double(plot_chanlocs(i).X);
-            plot_chanlocs(i).Y = double(plot_chanlocs(i).Y);
-            plot_chanlocs(i).Z = double(plot_chanlocs(i).Z);
-        end
-        % Explicitly convert to get radius/theta
-        plot_chanlocs = convertlocs(plot_chanlocs, 'cart2all');
-    end
-
-    if isfield(plot_chanlocs, 'labels') && ~isempty(plot_chanlocs)
-         % Calculate safe scalar plotrad
-         my_plotrad = 0.5;
-         if isfield(plot_chanlocs, 'radius')
-             all_rads = [plot_chanlocs.radius];
-             if ~isempty(all_rads)
-                 my_plotrad = max(max(all_rads)*1.02, 0.5);
-             end
-         end
-         
-         figure; 
-         topoplot(diag(refCOV), plot_chanlocs, 'maplimits','maxmin', 'electrodes', 'on', 'plotrad', my_plotrad);
-         title('Reference Covariance Diagonal');
-    end
-catch ME
-    warning('GEDAI:TopoplotFailed', 'Could not plot reference covariance topography: %s', ME.message);
-    if exist('gcf', 'var'), close(gcf); end
-end
 
 % --- Wavelet-based High-Pass Filtering ---
 % Calculate required level to resolve lowcut_frequency
