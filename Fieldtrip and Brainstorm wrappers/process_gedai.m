@@ -441,6 +441,12 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
         FileMatArtifacts = FileMat;
         
         % 3. Update data field .F (rows=channels, cols=time)
+        % Initialize F with zeros (same size as input, type double or single based on context)
+        % This ensures F is a numeric matrix even if FileMat came from a raw link (where F might be struct/object)
+        nChannels = size(sInput.A, 1);
+        nTime = size(sInput.A, 2);
+        FileMatArtifacts.F = zeros(nChannels, nTime);
+        
         % Only update the EEG/MEG channels where we have artifact data
         FileMatArtifacts.F(eeg_meg_idx, :) = EEGartifacts.data;
         
