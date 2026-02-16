@@ -257,7 +257,7 @@ wavelet_type = 'haar';
 % Robust execution order: GPU(Double) -> GPU(Single) -> CPU(Double) -> CPU(Single)
 success = false;
 
-disp([newline 'Wavelet high-pass filtering > ' num2str(highpass_frequency) 'Hz']);
+% disp([newline 'Wavelet high-pass filtering > ' num2str(highpass_frequency) 'Hz']);
 warning('off');
 % Attempt GPU Processing
 if gpuDeviceCount > 0

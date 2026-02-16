@@ -57,7 +57,7 @@ function sProcess = GetDescription() %#ok<DEFNU>
     % === Reference matrix type
     sProcess.options.label2.Comment = '<B>Leadfield matrix</B>';
     sProcess.options.label2.Type    = 'label';
-    sProcess.options.ref_matrix_type.Comment = {'Freesurfer (precomputed for EEG)', 'Freesurfer (interpolated for EEG)', 'Brainstorm headmodel (custom for M/EEG)'; ...
+    sProcess.options.ref_matrix_type.Comment = {'Freesurfer precomputed (for standard EEG electrode locations)', 'Freesurfer interpolated (for non-standard EEG electrode locations)', 'Brainstorm headmodel (custom for M/EEG)'; ...
                                                 'fs_precomputed', 'fs_interpolated', 'bst_headmodel'};
     sProcess.options.ref_matrix_type.Type    = 'radio_label';
     sProcess.options.ref_matrix_type.Value   = 'bst_headmodel';
@@ -71,7 +71,7 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.visualize_artifacts.Comment = 'Visualize artifacts';
     sProcess.options.visualize_artifacts.Type    = 'checkbox';
     sProcess.options.visualize_artifacts.Value   = 0;
-    
+
     % === Save artifacts data
     % sProcess.options.save_artifacts.Comment = 'Save artifacts data';
     % sProcess.options.save_artifacts.Type    = 'checkbox';
