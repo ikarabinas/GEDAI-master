@@ -33,15 +33,9 @@ log_Eig_val_all = log(magnitudes(magnitudes > 0)) + 100;
 correction_factor = 1.00;
 T1 = correction_factor * (105 - artifact_threshold_in) / 100;
 
-%% Defining artifact threshold with Probability Integral Transform (PIT) fitting
-original_data = unique(log_Eig_val_all);
-[f,x] = ecdf(original_data);
-[unique_x, ia, ~] = unique(original_data);
-unique_f = f(ia);
-transformed_data = interp1(unique_x, unique_f, original_data, 'linear', 'extrap');
-upper_PIT_threshold = 0.95;
-outliers = original_data(transformed_data > upper_PIT_threshold);
-Treshold1 = T1 * min(outliers);
+%% Defining artifact threshold
+percentile_threshold = 98;
+Treshold1 = T1 * prctile(log_Eig_val_all,percentile_threshold);
 
 %% Cleaning EEG by removing outlying GEVD components
 epoch_samples = srate * epoch_size;
@@ -73,10 +67,14 @@ for i = 1:num_epochs
     % Apply cosine windowing to mitigate edge effects from epoching
     if i == 1
         cleaned_epoch(:, half_epoch+1:end) = cleaned_epoch(:, half_epoch+1:end) .* cosine_weights(:, half_epoch+1:end);
+        artifacts(:, :, i) = artifacts(:, :, i); % Copy first
+        artifacts(:, half_epoch+1:end, i) = artifacts(:, half_epoch+1:end, i) .* cosine_weights(:, half_epoch+1:end);
     elseif i == num_epochs
         cleaned_epoch(:, 1:half_epoch) = cleaned_epoch(:, 1:half_epoch) .* cosine_weights(:, 1:half_epoch);
+        artifacts(:, 1:half_epoch, i) = artifacts(:, 1:half_epoch, i) .* cosine_weights(:, 1:half_epoch);
     else
         cleaned_epoch = cleaned_epoch .* cosine_weights;
+        artifacts(:, :, i) = artifacts(:, :, i) .* cosine_weights;
     end
     
     cleaned_epoched_data(:,:,i) = cleaned_epoch;
