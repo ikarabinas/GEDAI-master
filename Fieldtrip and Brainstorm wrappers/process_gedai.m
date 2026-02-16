@@ -71,11 +71,12 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.visualize_artifacts.Comment = 'Visualize artifacts';
     sProcess.options.visualize_artifacts.Type    = 'checkbox';
     sProcess.options.visualize_artifacts.Value   = 0;
+    
     % === Save artifacts data
-    sProcess.options.save_artifacts.Comment = 'Save artifacts data';
-    sProcess.options.save_artifacts.Type    = 'checkbox';
-    sProcess.options.save_artifacts.Value   = 0;
-    sProcess.isSeparator = 1;
+    % sProcess.options.save_artifacts.Comment = 'Save artifacts data';
+    % sProcess.options.save_artifacts.Type    = 'checkbox';
+    % sProcess.options.save_artifacts.Value   = 0;
+    % sProcess.isSeparator = 1;
 
     % === ENOVA bad epoch rejection
     sProcess.options.label4.Comment = '<B>ENOVA bad epoch rejection</B>';
