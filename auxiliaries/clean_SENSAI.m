@@ -1,4 +1,4 @@
-function [cov_signal_epoched, cov_noise_epoched, artifact_threshold_out,Treshold1] = clean_SENSAI(artifact_threshold_in, refCOV, Eval, Evec, cov_total, varargin)
+function [cov_signal_epoched, cov_noise_epoched, artifact_threshold_out,Treshold1] = clean_SENSAI(artifact_threshold_in, refCOV, Eval, Evec, cov_total, signal_type)
 %   This GEDAI function estimates signal and noise covariances analytically
 %%   Creative Commons License
 %
@@ -49,21 +49,19 @@ magnitudes = abs(all_diagonals);
 log_Eig_val_all = log(magnitudes(magnitudes > 0)) + 100;
 
 
-%% Check for Fixed Threshold Override (for Cross-Validation)
-fixed_thresh_idx = find(strcmpi(varargin, 'FixedThreshold'));
-
-if ~isempty(fixed_thresh_idx)
-    Treshold1 = varargin{fixed_thresh_idx + 1};
-    % display(['Using Fixed Absolute Threshold: ' num2str(Treshold1)]);
-else
     %% Artifacting multiplication factor T1
     correction_factor = 1.00;
 T1 = correction_factor * (105 - artifact_threshold_in) / 100;
 
 %% Defining artifact threshold
-percentile_threshold = 98;
+    if strcmpi(signal_type, 'eeg')
+       percentile_threshold = 98;
+      
+    elseif strcmpi(signal_type, 'meg')
+           percentile_threshold = 99;
+    end
 Treshold1 = T1 * prctile(log_Eig_val_all, percentile_threshold);
-end
+
 
 %% Compute Regularized Reference Covariance
 % Replicate logic from GEDAI_per_band.m to ensure we have the correct B for B-orthogonality

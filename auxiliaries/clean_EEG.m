@@ -11,7 +11,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [cleaned_data, artifacts_data, artifact_threshold_out] = clean_EEG(EEGdata_epoched, srate, epoch_size, artifact_threshold_in, refCOV, Eval, Evec, cosine_weights)
+function [cleaned_data, artifacts_data, artifact_threshold_out] = clean_EEG(EEGdata_epoched, srate, epoch_size, artifact_threshold_in, refCOV, Eval, Evec, cosine_weights, signal_type)
 %   This GEDAI function reconstructs the signal after removing artifactual components
 
 % --- PRE-ALLOCATION ---
@@ -34,8 +34,16 @@ correction_factor = 1.00;
 T1 = correction_factor * (105 - artifact_threshold_in) / 100;
 
 %% Defining artifact threshold
-percentile_threshold = 98;
+
+    if strcmpi(signal_type, 'eeg')
+       percentile_threshold = 98;
+      
+    elseif strcmpi(signal_type, 'meg')
+           percentile_threshold = 99;
+    end
+
 Treshold1 = T1 * prctile(log_Eig_val_all,percentile_threshold);
+
 
 %% Cleaning EEG by removing outlying GEVD components
 epoch_samples = srate * epoch_size;
