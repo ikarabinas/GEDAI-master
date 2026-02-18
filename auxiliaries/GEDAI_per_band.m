@@ -102,7 +102,7 @@ if ischar(artifact_threshold_type) && startsWith(artifact_threshold_type, 'auto'
         refCOV_top_PCs = 3;
       
     elseif strcmpi(signal_type, 'meg')
-        refCOV_top_PCs = 5;
+        refCOV_top_PCs = 7;
       
       
     end

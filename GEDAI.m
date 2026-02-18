@@ -263,6 +263,7 @@ warning('off');
 if gpuDeviceCount > 0
     try
         disp('Attempting GPU processing (Double Precision)...');
+        parallel.gpu.enableCUDAForwardCompatibility(true)
         data_gpu = gpuArray(EEGavRef.data');
         wpt_hp = modwt_custom(data_gpu, wavelet_type, hp_wavelet_levels);
         mra_hp = gather(modwtmra_custom(wpt_hp, wavelet_type)); 
@@ -312,16 +313,18 @@ end
 EEGavRef.data = squeeze(sum(mra_hp, 1))';
 clear mra_hp
 
-%% First pass: Broadband denoising
-disp([newline 'SENSAI threshold detection...please wait']);
-broadband_optimization_type = 'parabolic';
-broadband_artifact_threshold_type = 'auto-';
-broadband_minThreshold=0;
-[cleaned_broadband_data, ~, broadband_sensai, broadband_thresh, broadband_ENOVA] = GEDAI_per_band(double(EEGavRef.data), EEGavRef.srate, EEGavRef.chanlocs, broadband_artifact_threshold_type, broadband_epoch_size, refCOV, broadband_optimization_type, parallel, signal_type, broadband_minThreshold);
-% Initialize the output arrays with the broadband results
-SENSAI_score_per_band = broadband_sensai;
-artifact_threshold_per_band = broadband_thresh;
-ENOVA_per_band = broadband_ENOVA;
+    disp([newline 'SENSAI threshold detection...please wait']);
+    broadband_optimization_type = 'parabolic';
+    broadband_artifact_threshold_type = 'auto-';
+    broadband_minThreshold = 0;
+    [cleaned_broadband_data, ~, broadband_sensai, broadband_thresh, broadband_ENOVA] = GEDAI_per_band(double(EEGavRef.data), EEGavRef.srate, EEGavRef.chanlocs, broadband_artifact_threshold_type, broadband_epoch_size, refCOV, broadband_optimization_type, parallel, signal_type, broadband_minThreshold);
+    SENSAI_score_per_band = broadband_sensai;
+    artifact_threshold_per_band = broadband_thresh;
+    ENOVA_per_band = broadband_ENOVA;
+
+
+
+
 %% Second pass: Wavelet decomposition and per-band denoising
 % MEMORY OPTIMIZED: Use incremental band processing instead of full decomposition
 unfiltered_data = cleaned_broadband_data';
@@ -438,8 +441,8 @@ if parallel
             % Determine minThreshold based on signal type and frequency
             current_center_freq = center_frequencies(f);
             current_minThreshold = 0;
-            if strcmpi(signal_type, 'meg') && (current_center_freq >= 7 && current_center_freq <= 13)
-                current_minThreshold = -4;
+            if (current_center_freq >= 7 && current_center_freq <= 13)
+                current_minThreshold = -6;
             end
 
             try
@@ -490,7 +493,7 @@ if ~parallel || ~success_parallel
             current_center_freq = center_frequencies(f);
             current_minThreshold = 0;
             if strcmpi(signal_type, 'meg') && (current_center_freq >= 7 && current_center_freq <= 13)
-                current_minThreshold = -4;
+                current_minThreshold = -6;
             end
             
             try
@@ -527,7 +530,7 @@ if ~parallel || ~success_parallel
             current_center_freq = center_frequencies(f);
             current_minThreshold = 0;
             if strcmpi(signal_type, 'meg') && (current_center_freq >= 7 && current_center_freq <= 13)
-                current_minThreshold = -4;
+                current_minThreshold = -6;
             end
             
             [cleaned_band_data, ~, sensai_val, thresh_val, enova_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false, signal_type, current_minThreshold);
