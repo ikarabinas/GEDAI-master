@@ -400,9 +400,6 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
     sInput.A = sOutput.A;  % Use the full channel data with cleaned EEG
     
     % Update Comment logic
-    % Force DataType to 'recordings' (imported data) to ensure it stays in the same study
-    sInput.DataType = 'recordings';
-    
     new_duration = sInput.TimeVector(end) - sInput.TimeVector(1);
     
     % Get the base comment
