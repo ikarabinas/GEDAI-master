@@ -38,7 +38,9 @@ function [SIGNAL_subspace_similarity, NOISE_subspace_similarity, SENSAI_score] =
 [cov_signal_epoched, cov_noise_epoched] = clean_SENSAI(artifact_threshold, refCOV, Eval, Evec, cov_total, signal_type);
 
 %% Estimate Signal Quality
-top_PCs = 3;
+% Top PCs for SENSAI (Hardcoded and separate from refCOV top PCs)
+top_PCs = 3; 
+
 num_chans = size(refCOV, 1);
 
 % Top eigenvectors of reference covariance (Calculated outside and passed in)
@@ -58,19 +60,15 @@ all_noise_evals = zeros(num_chans, num_epochs);
 for epoch = 1:num_epochs
     % SIGNAL SUBSPACE similarity
     cov_signal = cov_signal_epoched(:,:,epoch);
-    [evecs_signal, evals_signal] = eig(cov_signal);
-    all_signal_evals(:, epoch) = diag(evals_signal); % Store for RMT
-    [~, sidxS_EEGout] = sort(diag(evals_signal), 'descend');
-    evecs_signal = evecs_signal(:, sidxS_EEGout(1:top_PCs));
+    % Use eigs for truncated decomposition
+    [evecs_signal, evals_signal] = eigs(cov_signal, top_PCs);
     [SIGNAL_cos_theta] = subspace_angles(evecs_signal, evecs_Template_cov); 
     SIGNAL_subspace_similarity_distribution(epoch) = prod(SIGNAL_cos_theta);
 
     % NOISE SUBSPACE similarity
     cov_noise = cov_noise_epoched(:,:,epoch);
-    [evecs_noise, evals_noise] = eig(cov_noise);
-    all_noise_evals(:, epoch) = diag(evals_noise); % Store for RMT
-    [~, sidxS_noise] = sort(diag(evals_noise), 'descend');
-    evecs_noise = evecs_noise(:, sidxS_noise(1:top_PCs));
+    % Use eigs for truncated decomposition
+    [evecs_noise, evals_noise] = eigs(cov_noise, top_PCs);
     [NOISE_cos_theta] = subspace_angles(evecs_noise, evecs_Template_cov); 
     NOISE_subspace_similarity_distribution(epoch) = prod(NOISE_cos_theta);
 
