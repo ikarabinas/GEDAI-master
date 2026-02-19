@@ -53,6 +53,12 @@ def.signal_type             = '';       % empty = auto-detect
 
 cfg = applyDefaults(cfg, def);
 
+% Allow numeric threshold (e.g. cfg.artifact_threshold_type = 3.5)
+% GEDAI_per_band expects a string; convert so str2double() works correctly.
+if isnumeric(cfg.artifact_threshold_type)
+    cfg.artifact_threshold_type = num2str(cfg.artifact_threshold_type);
+end
+
 % ---------- FieldTrip field checks ----------
 reqFields = {'trial', 'time', 'label', 'fsample'};
 for fi = reqFields
