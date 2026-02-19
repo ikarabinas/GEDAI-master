@@ -170,7 +170,7 @@ end
 if ~ischar(ref_matrix_type)
     refCOV = ref_matrix_type; % Use custom covariance matrix
     disp([newline 'Using custom covariance matrix']);
-
+    % 
     % if strcmp(signal_type, 'meg')
     %  disp([newline 'Normalizing MEG gram matrix']);
     % refCOV=corrcov(refCOV);
@@ -389,11 +389,6 @@ str_freqs = num2str(center_frequencies(1:num_bands_to_process)', '%.2g');
 str_epochs = num2str(epoch_sizes_per_wavelet_band(1:num_bands_to_process)', '%.2g');
 col1_width = max(length(header1), size(str_freqs, 2));
 col2_width = max(length(header2), size(str_epochs, 2));
-% fprintf('%s%*s | %-*s\n', left_margin, col1_width, header1, col2_width, header2);
-% fprintf('%s%s-|- %s\n', left_margin, repmat('-', 1, col1_width), repmat('-', 1, col2_width));
-% for i = 1:num_bands_to_process
-%     fprintf('%s%*s | %-*s\n', left_margin, col1_width, str_freqs(i,:), col2_width, str_epochs(i,:));
-% end
 
 disp([newline 'Excluding ', num2str(lowest_wavelet_bands_to_exclude), ' wavelet bands with upper frequency < ' num2str(lowcut_frequency) ' Hz.']);
 
@@ -492,7 +487,7 @@ if ~parallel || ~success_parallel
             % Determine minThreshold based on signal type and frequency
             current_center_freq = center_frequencies(f);
             current_minThreshold = 0;
-            if strcmpi(signal_type, 'meg') && (current_center_freq >= 7 && current_center_freq <= 13)
+            if (current_center_freq >= 7 && current_center_freq <= 13)
                 current_minThreshold = -6;
             end
             
