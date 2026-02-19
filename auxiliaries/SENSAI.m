@@ -44,9 +44,6 @@ top_PCs = 3;
 num_chans = size(refCOV, 1);
 
 % Top eigenvectors of reference covariance (Calculated outside and passed in)
-% [evecs_Template_cov, evals_Template_cov] = eig(refCOV);
-% [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
-% evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:top_PCs));
 
 num_epochs = size(cov_signal_epoched, 3);
 
@@ -57,20 +54,31 @@ NOISE_subspace_similarity_distribution = zeros(1, num_epochs);
 all_signal_evals = zeros(num_chans, num_epochs);
 all_noise_evals = zeros(num_chans, num_epochs);
 
+% Use eig (full) for small matrices (<150 ch), eigs for large (benchmark crossover ~150-200)
+use_full_eig = (num_chans < 150);
+
 for epoch = 1:num_epochs
     % SIGNAL SUBSPACE similarity
     cov_signal = cov_signal_epoched(:,:,epoch);
-    % Use eigs for truncated decomposition
-    [evecs_signal, evals_signal] = eigs(cov_signal, top_PCs);
-    [SIGNAL_cos_theta] = subspace_angles(evecs_signal, evecs_Template_cov); 
-    SIGNAL_subspace_similarity_distribution(epoch) = prod(SIGNAL_cos_theta);
+    if use_full_eig
+        [Vs, Ds] = eig(cov_signal);
+        [~, idx] = sort(diag(Ds), 'descend');
+        evecs_signal = Vs(:, idx(1:top_PCs));
+    else
+        [evecs_signal, ~] = eigs(cov_signal, top_PCs);
+    end
+    SIGNAL_subspace_similarity_distribution(epoch) = prod(subspace_angles(evecs_signal, evecs_Template_cov));
 
     % NOISE SUBSPACE similarity
     cov_noise = cov_noise_epoched(:,:,epoch);
-    % Use eigs for truncated decomposition
-    [evecs_noise, evals_noise] = eigs(cov_noise, top_PCs);
-    [NOISE_cos_theta] = subspace_angles(evecs_noise, evecs_Template_cov); 
-    NOISE_subspace_similarity_distribution(epoch) = prod(NOISE_cos_theta);
+    if use_full_eig
+        [Vn, Dn] = eig(cov_noise);
+        [~, idx] = sort(diag(Dn), 'descend');
+        evecs_noise = Vn(:, idx(1:top_PCs));
+    else
+        [evecs_noise, ~] = eigs(cov_noise, top_PCs);
+    end
+    NOISE_subspace_similarity_distribution(epoch) = prod(subspace_angles(evecs_noise, evecs_Template_cov));
 
 end
 

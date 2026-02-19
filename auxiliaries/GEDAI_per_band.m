@@ -109,15 +109,18 @@ if isnan(noise_multiplier), noise_multiplier = 3; end
 % Pre-calculate RefCOV eigenvectors for SENSAI
 % Pre-calculate RefCOV eigenvectors for SENSAI
 if ~exist('evecs_Template_cov', 'var')
-    if strcmpi(signal_type, 'eeg')
-        refCOV_top_PCs = 3;
-    elseif strcmpi(signal_type, 'meg')
-        refCOV_top_PCs = 12;
-    end
-    
+    % Adaptive: minimum PCs explaining >= 70% of refCOV variance
+    % Use refCOV_reg (regularized, always well-conditioned)
+    all_evals_refCOV = eig(refCOV_reg);
+    all_evals_refCOV = sort(all_evals_refCOV, 'descend');
+    cumvar_refCOV = cumsum(all_evals_refCOV) / sum(all_evals_refCOV);
+    refCOV_top_PCs = find(cumvar_refCOV >= 0.70, 1, 'first');
+    refCOV_top_PCs = max(1, min(refCOV_top_PCs, N_EEG_electrodes - 1));
+    fprintf('  RefCOV template PCs: %d (%.0f%% var)\n', refCOV_top_PCs, 100 * cumvar_refCOV(refCOV_top_PCs));
+
     % Use eigs for truncated decomposition (efficiency optimization)
-    [evecs_Template_cov, evals_Template_cov] = eigs(refCOV, refCOV_top_PCs);
-    
+    [evecs_Template_cov, evals_Template_cov] = eigs(refCOV_reg, refCOV_top_PCs);
+
     % Ensure sorted order
     [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
     evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov);
@@ -206,14 +209,16 @@ artifacts_data = artifacts_data(:, 1:pnts_original);
 % Need evecs_Template_cov again
 % Need evecs_Template_cov again
 if ~exist('evecs_Template_cov', 'var')
-    if strcmpi(signal_type, 'eeg')
-        refCOV_top_PCs = 3;
-    elseif strcmpi(signal_type, 'meg')
-        refCOV_top_PCs = 7;
-    end
-    
+    % Adaptive: minimum PCs explaining >= 70% of refCOV variance
+    % Use refCOV_reg (regularized, always well-conditioned)
+    all_evals_refCOV = eig(refCOV_reg);
+    all_evals_refCOV = sort(all_evals_refCOV, 'descend');
+    cumvar_refCOV = cumsum(all_evals_refCOV) / sum(all_evals_refCOV);
+    refCOV_top_PCs = find(cumvar_refCOV >= 0.70, 1, 'first');
+    refCOV_top_PCs = max(1, min(refCOV_top_PCs, N_EEG_electrodes - 1));
+
     % Use eigs for truncated decomposition
-    [evecs_Template_cov, evals_Template_cov] = eigs(refCOV, refCOV_top_PCs);
+    [evecs_Template_cov, evals_Template_cov] = eigs(refCOV_reg, refCOV_top_PCs);
     [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
     evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov);
 end
