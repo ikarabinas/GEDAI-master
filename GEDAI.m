@@ -424,7 +424,6 @@ if parallel
         temp_sensai_scores = zeros(1, num_bands_to_process);
         temp_thresholds = zeros(1, num_bands_to_process);
         temp_enova_scores = zeros(1, num_bands_to_process);
-        temp_cleaned_bands = cell(1, num_bands_to_process);  % MEMORY OPTIMIZED: Use cell array for temporary storage
         
         % MEMORY OPTIMIZED: Incremental band extraction in parallel
         parfor f = 1:num_bands_to_process
@@ -448,18 +447,12 @@ if parallel
                  [cleaned_band_data, ~, temp_sensai, temp_thresh, temp_enova_val] = GEDAI_per_band(single(wavelet_data_band), srate, EEGavRef.chanlocs, artifact_threshold_type, current_epoch_size, refCOV, 'parabolic', false, signal_type, current_minThreshold);
             end
             
-            % MEMORY OPTIMIZED: Store in cell array instead of 3D array
-            temp_cleaned_bands{f} = cleaned_band_data;
+            % RAM OPTIMIZATION: Accumulate directly using a reduction variable (avoids massive cell array copies)
+            wavelet_band_filtered_data = wavelet_band_filtered_data + cleaned_band_data;
             temp_sensai_scores(f) = temp_sensai;
             temp_thresholds(f) = temp_thresh;
             temp_enova_scores(f) = temp_enova_val;
         end
-        
-        % MEMORY OPTIMIZED: Accumulate cleaned bands into 2D array
-        for f = 1:num_bands_to_process
-            wavelet_band_filtered_data = wavelet_band_filtered_data + temp_cleaned_bands{f};
-        end
-        clear temp_cleaned_bands;  % Free memory immediately
         
         SENSAI_score_per_band = [SENSAI_score_per_band, temp_sensai_scores];
         artifact_threshold_per_band = [artifact_threshold_per_band, temp_thresholds];

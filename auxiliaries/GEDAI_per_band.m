@@ -68,19 +68,33 @@ for epo=1:N_epochs-1
     COV_2(:,:,epo) = cov(EEGdata_epoched_2(:,:,epo)');
 end
 COV(:,:,N_epochs) = cov(EEGdata_epoched(:,:,N_epochs)');
-%% Generalized Eigendecomposition (GEVD)
+%% Pre-whitened Generalized Eigendecomposition (GEVD)
 regularization_lambda = 0.05;
 reg_val = trace(refCOV) / N_EEG_electrodes;
 refCOV_reg = (1-regularization_lambda)*refCOV + regularization_lambda*reg_val*eye(N_EEG_electrodes, 'like', refCOV);
+
+% Speed optimization: calculate inverse Cholesky factor once and perform standard EVD
+L_inv = inv(chol(refCOV_reg, 'lower'));
+
 Evec = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs, 'like', eeg_data);
 Eval = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs, 'like', eeg_data);
 Evec_2 = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs-1, 'like', eeg_data);
 Eval_2 = zeros(N_EEG_electrodes, N_EEG_electrodes, N_epochs-1, 'like', eeg_data);
+
 for i=1:N_epochs-1
-    [Evec(:,:,i), Eval(:,:,i)] = eig(COV(:,:,i), refCOV_reg, 'chol');
-    [Evec_2(:,:,i), Eval_2(:,:,i)] = eig(COV_2(:,:,i), refCOV_reg, 'chol');
+    % Stream 1
+    C_whitened_1 = L_inv * COV(:,:,i) * L_inv';
+    [V_w_1, Eval(:,:,i)] = eig(C_whitened_1);
+    Evec(:,:,i) = L_inv' * V_w_1;
+    
+    % Stream 2
+    C_whitened_2 = L_inv * COV_2(:,:,i) * L_inv';
+    [V_w_2, Eval_2(:,:,i)] = eig(C_whitened_2);
+    Evec_2(:,:,i) = L_inv' * V_w_2;
 end
-[Evec(:,:,N_epochs), Eval(:,:,N_epochs)] = eig(COV(:,:,N_epochs), refCOV_reg, 'chol');
+C_whitened_N = L_inv * COV(:,:,N_epochs) * L_inv';
+[V_w_N, Eval(:,:,N_epochs)] = eig(C_whitened_N);
+Evec(:,:,N_epochs) = L_inv' * V_w_N;
 
 
 %% Determine Artifact Threshold and Clean EEG
