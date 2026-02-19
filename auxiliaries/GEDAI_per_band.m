@@ -107,17 +107,20 @@ if isnan(noise_multiplier), noise_multiplier = 3; end
 % --- Run SENSAI Optimization (Always) ---
 
 % Pre-calculate RefCOV eigenvectors for SENSAI
+% Pre-calculate RefCOV eigenvectors for SENSAI
 if ~exist('evecs_Template_cov', 'var')
-    [evecs_Template_cov, evals_Template_cov] = eig(refCOV);
-    [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
-    
     if strcmpi(signal_type, 'eeg')
         refCOV_top_PCs = 3;
     elseif strcmpi(signal_type, 'meg')
-        refCOV_top_PCs = 7;
+        refCOV_top_PCs = 12;
     end
     
-    evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:refCOV_top_PCs));
+    % Use eigs for truncated decomposition (efficiency optimization)
+    [evecs_Template_cov, evals_Template_cov] = eigs(refCOV, refCOV_top_PCs);
+    
+    % Ensure sorted order
+    [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
+    evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov);
 end
 
 maxThreshold = 12;
@@ -201,17 +204,18 @@ artifacts_data = artifacts_data(:, 1:pnts_original);
 %% Calculate final SENSAI score
 %% Calculate final SENSAI score
 % Need evecs_Template_cov again
+% Need evecs_Template_cov again
 if ~exist('evecs_Template_cov', 'var')
-    [evecs_Template_cov, evals_Template_cov] = eig(refCOV);
-    [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
-    
     if strcmpi(signal_type, 'eeg')
         refCOV_top_PCs = 3;
     elseif strcmpi(signal_type, 'meg')
         refCOV_top_PCs = 7;
     end
     
-    evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov(1:refCOV_top_PCs));
+    % Use eigs for truncated decomposition
+    [evecs_Template_cov, evals_Template_cov] = eigs(refCOV, refCOV_top_PCs);
+    [~, sidxS_Template_cov] = sort(diag(evals_Template_cov), 'descend');
+    evecs_Template_cov = evecs_Template_cov(:, sidxS_Template_cov);
 end
 [~, ~, SENSAI_score] = SENSAI(artifact_threshold_out, refCOV, Eval, Evec, noise_multiplier, COV, evecs_Template_cov, signal_type);
 
