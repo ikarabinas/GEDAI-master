@@ -133,10 +133,11 @@ addpath(fullfile(p, 'auxiliaries'));
 tStart = tic;
 
 % Display signal type being processed
+channel_type=EEGin.chanlocs(1).type;
 if strcmp(signal_type, 'eeg')
-    disp([newline 'GEDAI denoising of EEG data: '   num2str(size(EEGin.data,1)) ' channels']);
+    disp([newline 'GEDAI denoising of ' channel_type ' : '  num2str(size(EEGin.data,1)) ' channels']);
 elseif strcmp(signal_type, 'meg')
-    disp([newline 'GEDAI denoising of MEG data: ' num2str(size(EEGin.data,1)) ' channels']);
+    disp([newline 'GEDAI denoising of '  channel_type ' : ' num2str(size(EEGin.data,1)) ' channels']);
 end  
 % -- Ensure epoch size results in an even number of samples (for broadband)
  broadband_epoch_size = 1; % Note: IN SECONDS (this is now only the DEFAULT for broadband)
