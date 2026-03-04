@@ -96,7 +96,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com, ENOVA_per_band]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold, signal_type)
+function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com, ENOVA_per_band]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold, signal_type, visualize_manifold)
 
 if nargin < 2 || isempty(artifact_threshold_type)
     artifact_threshold_type = 'auto';
@@ -121,6 +121,9 @@ if nargin < 8 || isempty(ENOVA_threshold)
 end
 if nargin < 9 || isempty(signal_type)
     signal_type = 'eeg';
+end
+if nargin < 10 || isempty(visualize_manifold)
+    visualize_manifold = false;
 end
 % Validate signal_type
 if ~ismember(lower(signal_type), {'eeg', 'meg'})
@@ -168,6 +171,7 @@ else
 end
 
 %% Create Reference Covariance Matrix (refCOV)
+full_leadfield_matrix = []; % Initialize empty leadfield
 if ~ischar(ref_matrix_type)
     refCOV = ref_matrix_type; % Use custom covariance matrix
     disp([newline 'Using custom covariance matrix']);
@@ -238,7 +242,8 @@ else
         % 3. Interpolation and Covariance
         interpolated_EEG = interp_mont_GEDAI(leadfield_EEG, EEGavRef.chanlocs);
         refCOV = interpolated_EEG.data * interpolated_EEG.data';
-    end
+        
+        end
     end
 end
 
@@ -314,11 +319,13 @@ end
 EEGavRef.data = squeeze(sum(mra_hp, 1))';
 clear mra_hp
 
+    % ------------------ GEDAI ------------------------------
+
     disp([newline 'SENSAI threshold detection...please wait']);
     broadband_optimization_type = 'parabolic';
-    broadband_artifact_threshold_type = 1;
+    broadband_artifact_threshold_type = 'auto-';
     broadband_minThreshold = 0;
-    broadband_maxThreshold = 8;
+    broadband_maxThreshold = 12;
     [cleaned_broadband_data, ~, broadband_sensai, broadband_thresh, broadband_ENOVA] = GEDAI_per_band(double(EEGavRef.data), EEGavRef.srate, EEGavRef.chanlocs, broadband_artifact_threshold_type, broadband_epoch_size, refCOV, broadband_optimization_type, parallel, signal_type, broadband_minThreshold, broadband_maxThreshold);
     SENSAI_score_per_band = broadband_sensai;
     artifact_threshold_per_band = broadband_thresh;
@@ -757,6 +764,62 @@ else
     % Safer to use current pnts if no rejection happened:
     EEGclean.etc.GEDAI.samples_to_keep = true(1, size(EEGclean.data, 2));
 end
+
+
+    % --- Manifold Classification (Broadband) BEFORE Cleaning ---
+    if ~isempty(refCOV)
+        %fprintf('\nGenerating SENSAI Plot for Broadband data...\n');
+        
+        % Calculate Covariance of every epoch for broadband data BEFORE cleaning
+        % Using the same padding logic as GEDAI_per_band for consistency
+        pnts_original = size(EEGavRef.data, 2);
+        epoch_samples = round(EEGavRef.srate * broadband_epoch_size);
+        eeg_data_temp = EEGavRef.data;
+        
+        remainder = rem(pnts_original, epoch_samples);
+        if remainder ~= 0
+            samples_to_pad = epoch_samples - remainder;
+            reflection_segment = eeg_data_temp(:, end-samples_to_pad+1:end);
+            eeg_data_temp = [eeg_data_temp, fliplr(reflection_segment)];
+        end
+        
+        EEGdata_epoched = reshape(eeg_data_temp, size(eeg_data_temp, 1), epoch_samples, []);
+        num_epochs = size(EEGdata_epoched, 3);
+        COV_emp_array_before = cell(num_epochs, 1);
+        for epo = 1:num_epochs
+            COV_emp_array_before{epo} = cov(EEGdata_epoched(:,:,epo)');
+        end
+    end
+
+
+    % --- Manifold Classification (Broadband) AFTER Cleaning ---
+    if visualize_manifold && ~isempty(refCOV)
+        % fprintf('\nGenerating SENSAI Plot for Final Reconstructed Data (Before/After)...\n');
+        
+        % Calculate Covariance of every epoch for final data AFTER full cleaning pipeline
+        eeg_data_temp = EEGclean.data;
+        artifact_data_temp = EEGartifacts.data;
+        
+        if exist('remainder', 'var') && remainder ~= 0
+            reflection_segment = eeg_data_temp(:, end-samples_to_pad+1:end);
+            eeg_data_temp = [eeg_data_temp, fliplr(reflection_segment)];
+
+            reflection_segment_artifact = artifact_data_temp(:, end-samples_to_pad+1:end);
+            artifact_data_temp = [artifact_data_temp, fliplr(reflection_segment_artifact)];
+        end
+        
+        EEGdata_epoched = reshape(eeg_data_temp, size(eeg_data_temp, 1), epoch_samples, []);
+        EEGartifacts_epoched = reshape(artifact_data_temp, size(artifact_data_temp, 1), epoch_samples, []);
+        
+        COV_emp_array_after = cell(num_epochs, 1);
+        COV_emp_array_artifacts = cell(num_epochs, 1);
+        for epo = 1:num_epochs
+            COV_emp_array_after{epo} = cov(EEGdata_epoched(:,:,epo)');
+            COV_emp_array_artifacts{epo} = cov(EEGartifacts_epoched(:,:,epo)');
+        end
+        
+        SENSAI_visualization(refCOV, COV_emp_array_before, COV_emp_array_after, COV_emp_array_artifacts);
+    end
 
 % Add command history to EEGLAB structure
 if exist('eegh', 'file')
