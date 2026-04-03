@@ -40,8 +40,9 @@ Check out the [Wiki](https://github.com/neurotuning/GEDAI-master/wiki/).
 
 If you use GEDAI in your research, please cite the original publication:
 
-*Return of the GEDAI: Unsupervised EEG Denoising based on Leadfield Filtering* (2025)  [bioRxiv]. [[DOI/Link to paper](https://www.biorxiv.org/content/10.1101/2025.10.04.680449v1)]  
-Ros, T, Férat, V., Huang, Y., Colangelo, C., Kia S.M., Wolfers T., Vulliemoz, S., & Michela, A. 
+*Return of the GEDAI: Unsupervised EEG Denoising based on Leadfield Filtering* (2025)  [bioRxiv].  
+Ros, T, Férat, V., Huang, Y., Colangelo, C., Kia S.M., Wolfers T., Vulliemoz, S., & Michela, A.  
+doi: https://doi.org/10.1101/2025.10.04.680449  
 
 ### Watch the walktrough video on Youtube:
 ![Watch the Walkthrough video](https://github.com/user-attachments/assets/c1488fa6-236c-4cf8-9483-61728fc60a31)
