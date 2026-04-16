@@ -45,9 +45,9 @@ ssi_after     = prod(angs_after,     2) .^ (1/SSI_top_PCs);
 ssi_artifacts = prod(angs_artifacts, 2) .^ (1/SSI_top_PCs);
 
 %% ── 3. Epoch power  (log10 of trace) ────────────────────────────────────
-lpow_before    = log10(extract_power(C_before));
-lpow_after     = log10(extract_power(C_after));
-lpow_artifacts = log10(extract_power(C_artifacts));
+lpow_before    = 10 * log10(extract_power(C_before));
+lpow_after     = 10 * log10(extract_power(C_after));
+lpow_artifacts = 10 * log10(extract_power(C_artifacts));
 
 % Ideal Target: 100% Subspace Alignment at current signal power
 ideal_power_target = median(lpow_after);
@@ -91,13 +91,13 @@ cb = colorbar(ax1, 'eastoutside');
 cb.Label.String = 'SSI composite';  cb.Label.FontSize = 10;
 clim(ax1, [0 1]);
 
-xlabel(ax1, 'log_{10}( Epoch Power )',                'FontSize', 11);
+xlabel(ax1, 'Epoch Power (dB)',                'FontSize', 11);
 ylabel(ax1, 'SSI  (geom. mean of top-3 PC cosines)', 'FontSize', 11);
 title(ax1, sprintf('Before GEDAI\nn = %d epochs (50%% overlapping)  |  Mean SSI = %.3f', ...
       numel(ssi_before), mean(ssi_before)), 'FontSize', 11);
 ylim(ax1, [-0.05 1.15]);
 grid(ax1, 'on');  ax1.GridAlpha = 0.20;
-text(ax1, mean(xlim(ax1)), 1.08, 'Ideal Subspace Alignment', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+text(ax1, ideal_power_target, 1.08, 'Ideal Subspace Alignment', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 
 % ── Panel 2: After GEDAI  (Signal vs Noise) ──────────────────────────────
 ax2 = subplot(1, 2, 2);
@@ -126,10 +126,10 @@ else
 end
 title(ax2, ttl, 'FontSize', 11);
 
-xlabel(ax2, 'log_{10}( Epoch Power )',                'FontSize', 11);
+xlabel(ax2, 'Epoch Power (dB)',                'FontSize', 11);
 ylabel(ax2, 'SSI  (geom. mean of top-3 PC cosines)', 'FontSize', 11);
 legend(ax2, [h_star, h_sig, h_noise], ...
-       {'Leadfield', ...
+       {'Target Subspace', ...
         sprintf('Signal  (mean SSI=%.3f)', mean(ssi_after)), ...
         sprintf('Noise   (mean SSI=%.3f)', mean(ssi_artifacts))}, ...
        'Location', 'best', 'FontSize', 9);
@@ -137,10 +137,22 @@ ylim(ax2, [-0.05 1.15]);
 grid(ax2, 'on');  ax2.GridAlpha = 0.20;
 text(ax2, ideal_power_target, 1.08, 'Target Subspace', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 
-% ── Match X-axis range (power): left panel locked to right panel's limits ──
-all_after_lpow = [lpow_after(:); lpow_artifacts(:)];
-x_pad  = 0.05 * (max(all_after_lpow) - min(all_after_lpow));
-x_lims = [min(all_after_lpow) - x_pad,  max(all_after_lpow) + x_pad];
+% ── Match X-axis range (power): must include the full width of all 95% ellipses ──
+% The horizontal extents of a 2D confidence ellipse are at MeanX +/- sqrt(VarX * Chi2)
+chi2_95 = -2 * log(1 - 0.95);
+get_extents = @(x) [mean(x) - sqrt(var(x)*chi2_95), mean(x) + sqrt(var(x)*chi2_95)];
+
+ext_b = get_extents(lpow_before);
+ext_a = get_extents(lpow_after);
+ext_n = get_extents(lpow_artifacts);
+
+% Union of all points and all ellipse extents
+all_vals = [lpow_before; lpow_after; lpow_artifacts; ext_b'; ext_a'; ext_n'];
+x_min = min(all_vals);
+x_max = max(all_vals);
+x_pad = 0.10 * (x_max - x_min);
+
+x_lims = [x_min - x_pad, x_max + x_pad];
 xlim(ax1, x_lims);
 xlim(ax2, x_lims);
 
