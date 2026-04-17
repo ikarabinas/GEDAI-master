@@ -840,7 +840,10 @@ end
             COV_emp_array_before = COV_emp_array_before(1:num_epochs_after);
         end
         
-        SENSAI_visualization(refCOV, COV_emp_array_before, COV_emp_array_after, COV_emp_array_artifacts);
+        % Ensure visualization uses the same PC count as the SENSAI scoring logic
+        if strcmpi(signal_type, 'meg'), vis_pcs = 4; else, vis_pcs = 3; end
+        
+        SENSAI_visualization(refCOV, COV_emp_array_before, COV_emp_array_after, COV_emp_array_artifacts, vis_pcs);
     end
 
 % Add command history to EEGLAB structure

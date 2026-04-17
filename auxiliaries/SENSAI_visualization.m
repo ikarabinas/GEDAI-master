@@ -1,4 +1,4 @@
-function SENSAI_visualization(ref_cov, C_before, C_after, C_artifacts)
+function SENSAI_visualization(ref_cov, C_before, C_after, C_artifacts, SSI_top_PCs)
 % SENSAI_VISUALIZATION  2D SENSAI scatter: subspace similarity vs epoch power
 %
 % Inputs:
@@ -30,7 +30,13 @@ if ~iscell(C_before)
 end
 
 %% ── 1. Principal-angle subspaces ────────────────────────────────────────
-SSI_top_PCs  = min(3, size(ref_cov, 1));
+if nargin < 5 || isempty(SSI_top_PCs)
+    if size(ref_cov, 1) > 100 % Typical EEG dense array
+        SSI_top_PCs = 3;
+    else
+        SSI_top_PCs = 4; % MEG or sparse EEG
+    end
+end
 [Vref, Dref] = eig(ref_cov);
 [~, idx]     = sort(diag(Dref), 'descend');
 basis_ref    = Vref(:, idx(1:SSI_top_PCs));
@@ -92,7 +98,7 @@ cb.Label.String = 'SSI composite';  cb.Label.FontSize = 10;
 clim(ax1, [0 1]);
 
 xlabel(ax1, 'Epoch Power (dB)',                'FontSize', 11);
-ylabel(ax1, 'SSI  (geom. mean of top-3 PC cosines)', 'FontSize', 11);
+ylabel(ax1, sprintf('SSI  (geom. mean of top-%d PC cosines)', SSI_top_PCs), 'FontSize', 11);
 title(ax1, sprintf('Before GEDAI\nn = %d epochs (50%% overlapping)  |  Mean SSI = %.3f', ...
       numel(ssi_before), mean(ssi_before)), 'FontSize', 11);
 ylim(ax1, [-0.05 1.15]);
@@ -127,7 +133,7 @@ end
 title(ax2, ttl, 'FontSize', 11);
 
 xlabel(ax2, 'Epoch Power (dB)',                'FontSize', 11);
-ylabel(ax2, 'SSI  (geom. mean of top-3 PC cosines)', 'FontSize', 11);
+ylabel(ax2, sprintf('SSI  (geom. mean of top-%d PC cosines)', SSI_top_PCs), 'FontSize', 11);
 legend(ax2, [h_star, h_sig, h_noise], ...
        {'Target Subspace', ...
         sprintf('Signal  (mean SSI=%.3f)', mean(ssi_after)), ...
