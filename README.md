@@ -18,7 +18,7 @@
 ### Example videos of unsupervised GEDAI denoising
 
 
-[![Watch a few example videos](https://github.com/user-attachments/assets/6c4145c0-a67c-4575-bd83-e4a40d0dc871)](https://www.youtube.com/playlist?list=PLFwYJV7JHVFRmGTpW3y2MqkL_pYTitxpF)
+[![Watch a few example videos](https://github.com/user-attachments/assets/6c4145c0-a67c-4575-bd83-e4a40d0dc871)](https://www.youtube.com/watch?v=a4bb2wF_AEk&list=PLFwYJV7JHVFQV1Ki3oxa1BK6forD2TQ1d)
 
 
 ### Prerequisites
