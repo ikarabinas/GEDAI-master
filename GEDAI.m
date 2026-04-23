@@ -222,9 +222,9 @@ else
     % matches the actual number of channels.
     num_chans = length(EEGavRef.chanlocs);
     has_cartesian = length([EEGavRef.chanlocs.X]) == num_chans;
-    has_spherical = length([EEGavRef.chanlocs.sph_theta]) == num_chans;
+    has_spherical = length([EEGavRef.chanlocs.theta]) == num_chans;
     
-    if has_cartesian || has_spherical
+    if has_cartesian & has_spherical
         % 2. Leadfield Processing
         disp([newline 'GEDAI Leadfield model: BEM interpolated for EEG'])
         L = load('fsavLEADFIELD_4_GEDAI.mat');
