@@ -139,7 +139,7 @@ scatter(ax1, lpow_before(si), ssi_before(si), 38, ssi_before(si), ...
 
 % Ideal alignment horizon
 yline(ax1, 1, '--', 'Color', col_star, 'LineWidth', 1.5, 'Alpha', 0.6);
-draw_ellipse(ax1, lpow_before, ssi_before, col_bef, 0.95);
+% draw_ellipse(ax1, lpow_before, ssi_before, col_bef, 0.95);
 
 colormap(ax1, parula);
 cb = colorbar(ax1, 'eastoutside');
@@ -169,8 +169,8 @@ h_star = scatter(ax2, ideal_power_target, 1, 250, col_star, 'p', 'filled', ...
                   'MarkerEdgeColor', 'k', 'LineWidth', 1.0);
 
 % 95% confidence ellipses
-draw_ellipse(ax2, lpow_after,     ssi_after,     col_sig,   0.95);
-draw_ellipse(ax2, lpow_artifacts, ssi_artifacts, col_noise, 0.95);
+% draw_ellipse(ax2, lpow_after,     ssi_after,     col_sig,   0.95);
+% draw_ellipse(ax2, lpow_artifacts, ssi_artifacts, col_noise, 0.95);
 
 xlabel(ax2, 'Epoch Power (dB)',                'FontSize', 11);
 legend(ax2, [h_star, h_sig, h_noise], ...
