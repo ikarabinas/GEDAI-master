@@ -110,8 +110,11 @@ Y_lda = [ones(numel(ssi_after), 1); zeros(numel(ssi_artifacts), 1)];
 try
     lda_mdl      = fitcdiscr(X_lda, Y_lda, 'CrossVal', 'on', 'KFold', 5);
     lda_accuracy = (1 - kfoldLoss(lda_mdl)) * 100;
+    % Full model for background shading visualization
+    lda_full     = fitcdiscr(X_lda, Y_lda);
 catch
     lda_accuracy = NaN;
+    lda_full     = [];
 end
 
 %% ── 5. Plot ──────────────────────────────────────────────────────────────
@@ -126,6 +129,7 @@ col_star = [1.00 0.88 0.00];
 
 % ── Panel 1: Before GEDAI ────────────────────────────────────────────────
 ax1 = subplot(1, 2, 1);
+set(ax1, 'Position', [0.06, 0.12, 0.40, 0.74]); % Widened since marginals are removed
 hold(ax1, 'on');
 
 % Sort so high-SSI points render on top
@@ -144,14 +148,14 @@ clim(ax1, [0 1]);
 
 xlabel(ax1, 'Epoch Power (dB)',                'FontSize', 11);
 ylabel(ax1, sprintf('SSI  (geom. mean of top-%d PC cosines)', SSI_top_PCs), 'FontSize', 11);
-title(ax1, sprintf('Before Denoising\nn = %d epochs  |  Mean SSI = %.2f', ...
-      numel(ssi_before), mean(ssi_before)), 'FontSize', 11);
+% Title will be moved to marginal axes in section 6
 ylim(ax1, [-0.05 1.15]);
-grid(ax1, 'on');  ax1.GridAlpha = 0.20;
-text(ax1, ideal_power_target, 1.08, 'Ideal Subspace Alignment', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+grid(ax1, 'off'); % Grid removed as per user request
+text(ax1, ideal_power_target, 1.12, 'Ideal Subspace Alignment', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 
 % ── Panel 2: After GEDAI  (Signal vs Noise) ──────────────────────────────
 ax2 = subplot(1, 2, 2);
+set(ax2, 'Position', [0.55, 0.12, 0.35, 0.74]); % Manually fill the figure height
 hold(ax2, 'on');
 
 h_noise = scatter(ax2, lpow_artifacts, ssi_artifacts, 38, col_noise, ...
@@ -168,25 +172,40 @@ h_star = scatter(ax2, ideal_power_target, 1, 250, col_star, 'p', 'filled', ...
 draw_ellipse(ax2, lpow_after,     ssi_after,     col_sig,   0.95);
 draw_ellipse(ax2, lpow_artifacts, ssi_artifacts, col_noise, 0.95);
 
-if ~isnan(lda_accuracy)
-    ttl = sprintf('After Denoising  |  2D LDA accuracy: %.1f%%\nMean SSSI: %.2f   |   Mean NSSI: %.2f', ...
-                  lda_accuracy, mean(ssi_after), mean(ssi_artifacts));
-else
-    ttl = sprintf('After Denoising\nMean SSSI: %.2f   |   Mean NSSI: %.2f', ...
-                  mean(ssi_after), mean(ssi_artifacts));
-end
-title(ax2, ttl, 'FontSize', 11);
-
 xlabel(ax2, 'Epoch Power (dB)',                'FontSize', 11);
-ylabel(ax2, sprintf('SSI  (geom. mean of top-%d PC cosines)', SSI_top_PCs), 'FontSize', 11);
 legend(ax2, [h_star, h_sig, h_noise], ...
        {'Target Subspace', ...
         sprintf('Signal  (mean SSI=%.2f)', mean(ssi_after)), ...
         sprintf('Noise   (mean SSI=%.2f)', mean(ssi_artifacts))}, ...
        'Location', 'best', 'FontSize', 9);
 ylim(ax2, [-0.05 1.15]);
-grid(ax2, 'on');  ax2.GridAlpha = 0.20;
-text(ax2, ideal_power_target, 1.08, 'Target Subspace', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+grid(ax2, 'off'); % Grid removed as per user request
+
+% ── 5.1 LDA Shading (Background) ────────────────────────────────────────
+if ~isempty(lda_full)
+    xl = ax2.XLim; yl = ax2.YLim;
+    [Xg, Yg] = meshgrid(linspace(xl(1), xl(2), 200), linspace(yl(1), yl(2), 200));
+    % Important: Predict posterior probabilities for the gradient
+    [~, Probs] = predict(lda_full, [Yg(:), Xg(:)]);
+    Pg = reshape(Probs(:,2), size(Xg)); % Probability of being 'Signal'
+    
+    % Draw background with smooth gradient
+    h_cont = imagesc(ax2, xl, yl, Pg);
+    set(ax2, 'YDir', 'normal'); % imagesc flips the Y-axis by default
+    
+    % Custom 3-segment colormap: Light Red -> White -> Light Green
+    n = 64;
+    r = [ones(n,1); linspace(1, 0.92, n)'];
+    g = [linspace(0.92, 1, n)'; ones(n,1)];
+    b = [linspace(0.92, 1, n)'; linspace(1, 0.92, n)'];
+    bg_cmap = [r, g, b];
+    colormap(ax2, bg_cmap);
+    clim(ax2, [0 1]);
+    
+    % Send shading to back
+    uistack(h_cont, 'bottom');
+end
+text(ax2, ideal_power_target, 1.12, 'Target Subspace', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 
 % ── Match X-axis range (power): must include the full width of all 95% ellipses ──
 % The horizontal extents of a 2D confidence ellipse are at MeanX +/- sqrt(VarX * Chi2)
@@ -211,7 +230,21 @@ xlim(ax2, x_lims);
 sgtitle('SENSAI visualization:  Subspace Similarity  vs  Epoch Power', ...
         'FontSize', 13, 'FontWeight', 'bold');
 
-% ── 6. Output Metrics ─────────────────────────────────────────────────────
+% ── 6. Add Marginal Density Distributions ─────────────────────────────────
+% Panel 1 Marginals removed as per user request
+
+% Panel 2 Marginals
+if ~isnan(lda_accuracy)
+    ttl2 = sprintf('After Denoising  |  2D LDA accuracy: %.1f%%\nMean SSSI: %.2f   |   Mean NSSI: %.2f', ...
+                  lda_accuracy, mean(ssi_after), mean(ssi_artifacts));
+else
+    ttl2 = sprintf('After Denoising\nMean SSSI: %.2f   |   Mean NSSI: %.2f', ...
+                  mean(ssi_after), mean(ssi_artifacts));
+end
+add_marginal_densities(ax2, {lpow_after, lpow_artifacts}, {ssi_after, ssi_artifacts}, {col_sig, col_noise}, SSI_top_PCs, ttl2);
+
+
+% ── 7. Output Metrics ─────────────────────────────────────────────────────
 metrics = struct();
 metrics.ssi_before_mean = mean(ssi_before);
 metrics.ssi_after_mean  = mean(ssi_after);
@@ -273,4 +306,63 @@ function draw_ellipse(ax, x, y, col, conf)
     plot(ax, ex, ey, '-', 'Color', [col, 0.85], 'LineWidth', 1.8);
     plot(ax, mu(1), mu(2), '+', 'Color', col*0.7, ...
          'MarkerSize', 10, 'LineWidth', 2);
+end
+
+
+%% ══════════════════════════════════════════════════════════════════════════
+function add_marginal_densities(ax, x_data, y_data, cols, SSI_top_PCs, ttl)
+% Adds marginal KDE plots to the top and right of the provided axes
+    
+    % Get current axes position and shrink it to make room
+    set(ax, 'Units', 'normalized');
+    pos = ax.Position; 
+    
+    margin = 0.01;  % space between scatter and marginals
+    m_size = 0.12;   % size of marginal axes relative to main
+    
+    % New position for the scatter plot
+    % We shrink the height and width significantly to avoid title overlap
+    new_w = pos(3) * (1 - m_size - margin);
+    new_h = pos(4) * (1 - m_size - margin);
+    
+    set(ax, 'Position', [pos(1), pos(2), new_w, new_h]);
+    
+    % --- Top Marginal (X distribution) ---
+    ax_x = axes('Position', [pos(1), pos(2) + new_h + margin, new_w, pos(4) * m_size], ...
+                'Units', 'normalized', 'Color', 'none', ...
+                'XLim', ax.XLim, 'XTick', [], 'YTick', [], ...
+                'XAxisLocation', 'bottom', 'Box', 'off');
+    hold(ax_x, 'on');
+    title(ax_x, ttl, 'FontSize', 11); % Move title to the top-most axes
+    
+    % --- Right Marginal (Y distribution) ---
+    ax_y = axes('Position', [pos(1) + new_w + margin, pos(2), pos(3) * m_size, new_h], ...
+                'Units', 'normalized', 'Color', 'none', ...
+                'YLim', ax.YLim, 'YTick', [], 'XTick', [], ...
+                'YAxisLocation', 'left', 'Box', 'off');
+    hold(ax_y, 'on');
+    
+    % Plot densities for each group
+    for i = 1:length(x_data)
+        % X density (Power)
+        try
+            [f, xi] = ksdensity(x_data{i});
+            fill(ax_x, xi, f, cols{i}, 'FaceAlpha', 0.2, 'EdgeColor', cols{i}, 'LineWidth', 1);
+        catch
+        end
+        
+        % Y density (SSI)
+        try
+            [f, yi] = ksdensity(y_data{i});
+            fill(ax_y, f, yi, cols{i}, 'FaceAlpha', 0.2, 'EdgeColor', cols{i}, 'LineWidth', 1);
+        catch
+        end
+    end
+    
+    % Link the limits so zooming/panning (if enabled) works
+    linkaxes([ax, ax_x], 'x');
+    linkaxes([ax, ax_y], 'y');
+    
+    % Bring main scatter to front to ensure tooltips work
+    uistack(ax, 'top');
 end
