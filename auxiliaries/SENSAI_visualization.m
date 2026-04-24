@@ -151,7 +151,7 @@ ylabel(ax1, sprintf('SSI  (geom. mean of top-%d PC cosines)', SSI_top_PCs), 'Fon
 % Title will be moved to marginal axes in section 6
 ylim(ax1, [-0.05 1.15]);
 grid(ax1, 'off'); % Grid removed as per user request
-text(ax1, ideal_power_target, 1.12, 'Ideal Subspace Alignment', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+text(ax1, ideal_power_target, 1.12, 'Leadfield Subspace Alignment', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 
 % ── Panel 2: After GEDAI  (Signal vs Noise) ──────────────────────────────
 ax2 = subplot(1, 2, 2);
@@ -163,7 +163,7 @@ h_noise = scatter(ax2, lpow_artifacts, ssi_artifacts, 38, col_noise, ...
 h_sig   = scatter(ax2, lpow_after,     ssi_after,     38, col_sig, ...
                   'filled', 'MarkerEdgeColor', 'none', 'MarkerFaceAlpha', 0.70);
 
-% Ideal alignment horizon and dataset-specific target star
+% Ideal alignment horizon and dataset-specific Leadfield star
 yline(ax2, 1, '--', 'Color', col_star, 'LineWidth', 1.5, 'Alpha', 0.6);
 h_star = scatter(ax2, ideal_power_target, 1, 250, col_star, 'p', 'filled', ...
                   'MarkerEdgeColor', 'k', 'LineWidth', 1.0);
@@ -174,7 +174,7 @@ h_star = scatter(ax2, ideal_power_target, 1, 250, col_star, 'p', 'filled', ...
 
 xlabel(ax2, 'Epoch Power (dB)',                'FontSize', 11);
 legend(ax2, [h_star, h_sig, h_noise], ...
-       {'Target Subspace', ...
+       {'Leadfield Subspace', ...
         sprintf('Signal  (mean SSI=%.2f)', mean(ssi_after)), ...
         sprintf('Noise   (mean SSI=%.2f)', mean(ssi_artifacts))}, ...
        'Location', 'best', 'FontSize', 9);
@@ -205,7 +205,7 @@ if ~isempty(lda_full)
     % Send shading to back
     uistack(h_cont, 'bottom');
 end
-text(ax2, ideal_power_target, 1.12, 'Target Subspace', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+text(ax2, ideal_power_target, 1.12, 'Leadfield Subspace', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 
 % ── Match X-axis range (power): must include the full width of all 95% ellipses ──
 % The horizontal extents of a 2D confidence ellipse are at MeanX +/- sqrt(VarX * Chi2)
