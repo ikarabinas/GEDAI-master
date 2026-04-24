@@ -1,36 +1,87 @@
-function SENSAI_visualization(ref_cov, C_before, C_after, C_artifacts)
+function metrics = SENSAI_visualization(EEGavRef, EEGclean, EEGartifacts, ref_cov, epoch_duration_sec, signal_type, SSI_top_PCs)
 % SENSAI_VISUALIZATION  2D SENSAI scatter: subspace similarity vs epoch power
 %
 % Inputs:
-%   ref_cov     - Leadfield covariance matrix (Channels x Channels)
-%   C_before    - Cell array of covariance matrices BEFORE denoising
-%   C_after     - Cell array of covariance matrices AFTER denoising (signal)
-%   C_artifacts - Cell array of covariance matrices of removed noise epochs
+%   EEGavRef           - Original EEG dataset BEFORE denoising
+%   EEGclean           - Cleaned EEG dataset AFTER denoising (signal)
+%   EEGartifacts       - EEG dataset containing only the removed artifacts
+%   ref_cov            - Leadfield covariance matrix (Channels x Channels)
+%   epoch_duration_sec - Duration (in seconds) of the epochs to be used for calculation (default 1s)
+%   signal_type        - 'eeg' or 'meg'. Dictates the number of principal components.
+%   SSI_top_PCs        - Optional: explicit number of principal components to use
 %
 % Axes:
-%   X  –  SSI composite: geometric mean of top-3 PC cosines  →  scalar in [0,1]
+%   X  –  SSI composite: geometric mean of top-N PC cosines  →  scalar in [0,1]
 %          (1 = epoch subspace perfectly aligned with leadfield)
 %   Y  –  log10(epoch power) = log10( trace(C) )
 %
 % Layout (side-by-side 2D scatters):
-%   Left  : Before GEDAI  (coloured by SSI value)
-%   Right : After  GEDAI  (green = signal, red = noise)
+%   Left  : Before Denoising  (coloured by SSI value)
+%   Right : After  Denoising  (green = signal, red = noise)
 %           + 95% confidence ellipses + 2D LDA accuracy
 
-%% ── 0. Input normalisation ──────────────────────────────────────────────
-if ~iscell(C_before)
-    num_emp = size(C_before, 3);
-    tmp_b = cell(num_emp,1); tmp_a = cell(num_emp,1); tmp_n = cell(num_emp,1);
-    for i = 1:num_emp
-        tmp_b{i} = C_before(:,:,i);
-        tmp_a{i} = C_after(:,:,i);
-        tmp_n{i} = C_artifacts(:,:,i);
+%% ── 0. Parse inputs and parameters ──────────────────────────────────────
+if nargin < 5 || isempty(epoch_duration_sec)
+    epoch_duration_sec = 1; % 1-second window by default
+end
+if nargin < 6 || isempty(signal_type)
+    signal_type = 'eeg';
+end
+if nargin < 7 || isempty(SSI_top_PCs)
+    if strcmpi(signal_type, 'meg') || size(ref_cov, 1) <= 100
+        SSI_top_PCs = 4; % MEG or sparse EEG
+    else
+        SSI_top_PCs = 3; % Typical EEG dense array
     end
-    C_before = tmp_b;  C_after = tmp_a;  C_artifacts = tmp_n;
+end
+
+%% ── 1. Epoch Data & Extract Covariances (Contiguous) ─────────────────
+srate = EEGavRef.srate;
+epoch_samples = round(srate * epoch_duration_sec);
+epoch_step    = epoch_samples;
+
+% Function to pad data and compute covariance cell arrays
+function COV_array = compute_cov_array(data)
+    pnts = size(data, 2);
+    remainder = rem(pnts, epoch_samples);
+    
+    if remainder ~= 0
+        samples_to_pad = epoch_samples - remainder;
+        reflection_segment = data(:, end-samples_to_pad+1:end);
+        padding = fliplr(reflection_segment); % Flip the segment left-to-right
+        data = [data, padding];
+    end
+    
+    num_epochs = size(data, 2) / epoch_samples;
+    COV_array = cell(num_epochs, 1);
+    for epo = 1:num_epochs
+        i_start = (epo - 1) * epoch_samples + 1;
+        i_end   = i_start + epoch_samples - 1;
+        COV_array{epo} = cov(data(:, i_start:i_end)');
+    end
+end
+
+C_before    = compute_cov_array(EEGavRef.data);
+C_after     = compute_cov_array(EEGclean.data);
+C_artifacts = compute_cov_array(EEGartifacts.data);
+
+% Align BEFORE array to the same epoch count for a fair comparison (in case of differing lengths e.g. after epoch rejection)
+num_epochs_after = length(C_after);
+if length(C_before) > num_epochs_after
+    C_before = C_before(1:num_epochs_after);
+elseif length(C_before) < num_epochs_after
+    C_after     = C_after(1:length(C_before));
+    C_artifacts = C_artifacts(1:length(C_before));
 end
 
 %% ── 1. Principal-angle subspaces ────────────────────────────────────────
-SSI_top_PCs  = min(3, size(ref_cov, 1));
+if nargin < 5 || isempty(SSI_top_PCs)
+    if size(ref_cov, 1) > 100 % Typical EEG dense array
+        SSI_top_PCs = 3;
+    else
+        SSI_top_PCs = 4; % MEG or sparse EEG
+    end
+end
 [Vref, Dref] = eig(ref_cov);
 [~, idx]     = sort(diag(Dref), 'descend');
 basis_ref    = Vref(:, idx(1:SSI_top_PCs));
@@ -59,8 +110,11 @@ Y_lda = [ones(numel(ssi_after), 1); zeros(numel(ssi_artifacts), 1)];
 try
     lda_mdl      = fitcdiscr(X_lda, Y_lda, 'CrossVal', 'on', 'KFold', 5);
     lda_accuracy = (1 - kfoldLoss(lda_mdl)) * 100;
+    % Full model for background shading visualization
+    lda_full     = fitcdiscr(X_lda, Y_lda);
 catch
     lda_accuracy = NaN;
+    lda_full     = [];
 end
 
 %% ── 5. Plot ──────────────────────────────────────────────────────────────
@@ -75,6 +129,7 @@ col_star = [1.00 0.88 0.00];
 
 % ── Panel 1: Before GEDAI ────────────────────────────────────────────────
 ax1 = subplot(1, 2, 1);
+set(ax1, 'Position', [0.06, 0.12, 0.40, 0.74]); % Widened since marginals are removed
 hold(ax1, 'on');
 
 % Sort so high-SSI points render on top
@@ -84,7 +139,7 @@ scatter(ax1, lpow_before(si), ssi_before(si), 38, ssi_before(si), ...
 
 % Ideal alignment horizon
 yline(ax1, 1, '--', 'Color', col_star, 'LineWidth', 1.5, 'Alpha', 0.6);
-draw_ellipse(ax1, lpow_before, ssi_before, col_bef, 0.95);
+% draw_ellipse(ax1, lpow_before, ssi_before, col_bef, 0.95);
 
 colormap(ax1, parula);
 cb = colorbar(ax1, 'eastoutside');
@@ -92,15 +147,15 @@ cb.Label.String = 'SSI composite';  cb.Label.FontSize = 10;
 clim(ax1, [0 1]);
 
 xlabel(ax1, 'Epoch Power (dB)',                'FontSize', 11);
-ylabel(ax1, 'SSI  (geom. mean of top-3 PC cosines)', 'FontSize', 11);
-title(ax1, sprintf('Before GEDAI\nn = %d epochs (50%% overlapping)  |  Mean SSI = %.3f', ...
-      numel(ssi_before), mean(ssi_before)), 'FontSize', 11);
+ylabel(ax1, sprintf('SSI  (geom. mean of top-%d PC cosines)', SSI_top_PCs), 'FontSize', 11);
+% Title will be moved to marginal axes in section 6
 ylim(ax1, [-0.05 1.15]);
-grid(ax1, 'on');  ax1.GridAlpha = 0.20;
-text(ax1, ideal_power_target, 1.08, 'Ideal Subspace Alignment', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+grid(ax1, 'off'); % Grid removed as per user request
+text(ax1, ideal_power_target, 1.12, 'Leadfield Subspace Alignment', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 
 % ── Panel 2: After GEDAI  (Signal vs Noise) ──────────────────────────────
 ax2 = subplot(1, 2, 2);
+set(ax2, 'Position', [0.55, 0.12, 0.35, 0.74]); % Manually fill the figure height
 hold(ax2, 'on');
 
 h_noise = scatter(ax2, lpow_artifacts, ssi_artifacts, 38, col_noise, ...
@@ -108,34 +163,49 @@ h_noise = scatter(ax2, lpow_artifacts, ssi_artifacts, 38, col_noise, ...
 h_sig   = scatter(ax2, lpow_after,     ssi_after,     38, col_sig, ...
                   'filled', 'MarkerEdgeColor', 'none', 'MarkerFaceAlpha', 0.70);
 
-% Ideal alignment horizon and dataset-specific target star
+% Ideal alignment horizon and dataset-specific Leadfield star
 yline(ax2, 1, '--', 'Color', col_star, 'LineWidth', 1.5, 'Alpha', 0.6);
 h_star = scatter(ax2, ideal_power_target, 1, 250, col_star, 'p', 'filled', ...
                   'MarkerEdgeColor', 'k', 'LineWidth', 1.0);
 
 % 95% confidence ellipses
-draw_ellipse(ax2, lpow_after,     ssi_after,     col_sig,   0.95);
-draw_ellipse(ax2, lpow_artifacts, ssi_artifacts, col_noise, 0.95);
-
-if ~isnan(lda_accuracy)
-    ttl = sprintf('After GEDAI  |  2D LDA accuracy: %.1f%%\nMean SSSI: %.3f   |   Mean NSSI: %.3f', ...
-                  lda_accuracy, mean(ssi_after), mean(ssi_artifacts));
-else
-    ttl = sprintf('After GEDAI\nMean SSSI: %.3f   |   Mean NSSI: %.3f', ...
-                  mean(ssi_after), mean(ssi_artifacts));
-end
-title(ax2, ttl, 'FontSize', 11);
+% draw_ellipse(ax2, lpow_after,     ssi_after,     col_sig,   0.95);
+% draw_ellipse(ax2, lpow_artifacts, ssi_artifacts, col_noise, 0.95);
 
 xlabel(ax2, 'Epoch Power (dB)',                'FontSize', 11);
-ylabel(ax2, 'SSI  (geom. mean of top-3 PC cosines)', 'FontSize', 11);
 legend(ax2, [h_star, h_sig, h_noise], ...
-       {'Target Subspace', ...
-        sprintf('Signal  (mean SSI=%.3f)', mean(ssi_after)), ...
-        sprintf('Noise   (mean SSI=%.3f)', mean(ssi_artifacts))}, ...
+       {'Leadfield Subspace', ...
+        sprintf('Signal  (mean SSI=%.2f)', mean(ssi_after)), ...
+        sprintf('Noise   (mean SSI=%.2f)', mean(ssi_artifacts))}, ...
        'Location', 'best', 'FontSize', 9);
 ylim(ax2, [-0.05 1.15]);
-grid(ax2, 'on');  ax2.GridAlpha = 0.20;
-text(ax2, ideal_power_target, 1.08, 'Target Subspace', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+grid(ax2, 'off'); % Grid removed as per user request
+
+% ── 5.1 LDA Shading (Background) ────────────────────────────────────────
+if ~isempty(lda_full)
+    xl = ax2.XLim; yl = ax2.YLim;
+    [Xg, Yg] = meshgrid(linspace(xl(1), xl(2), 200), linspace(yl(1), yl(2), 200));
+    % Important: Predict posterior probabilities for the gradient
+    [~, Probs] = predict(lda_full, [Yg(:), Xg(:)]);
+    Pg = reshape(Probs(:,2), size(Xg)); % Probability of being 'Signal'
+    
+    % Draw background with smooth gradient
+    h_cont = imagesc(ax2, xl, yl, Pg);
+    set(ax2, 'YDir', 'normal'); % imagesc flips the Y-axis by default
+    
+    % Custom 3-segment colormap: Light Red -> White -> Light Green
+    n = 64;
+    r = [ones(n,1); linspace(1, 0.92, n)'];
+    g = [linspace(0.92, 1, n)'; ones(n,1)];
+    b = [linspace(0.92, 1, n)'; linspace(1, 0.92, n)'];
+    bg_cmap = [r, g, b];
+    colormap(ax2, bg_cmap);
+    clim(ax2, [0 1]);
+    
+    % Send shading to back
+    uistack(h_cont, 'bottom');
+end
+text(ax2, ideal_power_target, 1.12, 'Leadfield Subspace', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 
 % ── Match X-axis range (power): must include the full width of all 95% ellipses ──
 % The horizontal extents of a 2D confidence ellipse are at MeanX +/- sqrt(VarX * Chi2)
@@ -159,6 +229,29 @@ xlim(ax2, x_lims);
 % ── Shared super-title ────────────────────────────────────────────────────
 sgtitle('SENSAI visualization:  Subspace Similarity  vs  Epoch Power', ...
         'FontSize', 13, 'FontWeight', 'bold');
+
+% ── 6. Add Marginal Density Distributions ─────────────────────────────────
+% Panel 1 Marginals removed as per user request
+
+% Panel 2 Marginals
+if ~isnan(lda_accuracy)
+    ttl2 = sprintf('After Denoising  |  2D LDA accuracy: %.1f%%\nMean SSSI: %.2f   |   Mean NSSI: %.2f', ...
+                  lda_accuracy, mean(ssi_after), mean(ssi_artifacts));
+else
+    ttl2 = sprintf('After Denoising\nMean SSSI: %.2f   |   Mean NSSI: %.2f', ...
+                  mean(ssi_after), mean(ssi_artifacts));
+end
+add_marginal_densities(ax2, {lpow_after, lpow_artifacts}, {ssi_after, ssi_artifacts}, {col_sig, col_noise}, SSI_top_PCs, ttl2);
+
+
+% ── 7. Output Metrics ─────────────────────────────────────────────────────
+metrics = struct();
+metrics.ssi_before_mean = mean(ssi_before);
+metrics.ssi_after_mean  = mean(ssi_after);
+metrics.ssi_artifacts_mean = mean(ssi_artifacts);
+metrics.lda_accuracy    = lda_accuracy;
+metrics.ideal_power_target_db = ideal_power_target;
+
 end
 
 
@@ -213,4 +306,63 @@ function draw_ellipse(ax, x, y, col, conf)
     plot(ax, ex, ey, '-', 'Color', [col, 0.85], 'LineWidth', 1.8);
     plot(ax, mu(1), mu(2), '+', 'Color', col*0.7, ...
          'MarkerSize', 10, 'LineWidth', 2);
+end
+
+
+%% ══════════════════════════════════════════════════════════════════════════
+function add_marginal_densities(ax, x_data, y_data, cols, SSI_top_PCs, ttl)
+% Adds marginal KDE plots to the top and right of the provided axes
+    
+    % Get current axes position and shrink it to make room
+    set(ax, 'Units', 'normalized');
+    pos = ax.Position; 
+    
+    margin = 0.01;  % space between scatter and marginals
+    m_size = 0.12;   % size of marginal axes relative to main
+    
+    % New position for the scatter plot
+    % We shrink the height and width significantly to avoid title overlap
+    new_w = pos(3) * (1 - m_size - margin);
+    new_h = pos(4) * (1 - m_size - margin);
+    
+    set(ax, 'Position', [pos(1), pos(2), new_w, new_h]);
+    
+    % --- Top Marginal (X distribution) ---
+    ax_x = axes('Position', [pos(1), pos(2) + new_h + margin, new_w, pos(4) * m_size], ...
+                'Units', 'normalized', 'Color', 'none', ...
+                'XLim', ax.XLim, 'XTick', [], 'YTick', [], ...
+                'XAxisLocation', 'bottom', 'Box', 'off');
+    hold(ax_x, 'on');
+    title(ax_x, ttl, 'FontSize', 11); % Move title to the top-most axes
+    
+    % --- Right Marginal (Y distribution) ---
+    ax_y = axes('Position', [pos(1) + new_w + margin, pos(2), pos(3) * m_size, new_h], ...
+                'Units', 'normalized', 'Color', 'none', ...
+                'YLim', ax.YLim, 'YTick', [], 'XTick', [], ...
+                'YAxisLocation', 'left', 'Box', 'off');
+    hold(ax_y, 'on');
+    
+    % Plot densities for each group
+    for i = 1:length(x_data)
+        % X density (Power)
+        try
+            [f, xi] = ksdensity(x_data{i});
+            fill(ax_x, xi, f, cols{i}, 'FaceAlpha', 0.2, 'EdgeColor', cols{i}, 'LineWidth', 1);
+        catch
+        end
+        
+        % Y density (SSI)
+        try
+            [f, yi] = ksdensity(y_data{i});
+            fill(ax_y, f, yi, cols{i}, 'FaceAlpha', 0.2, 'EdgeColor', cols{i}, 'LineWidth', 1);
+        catch
+        end
+    end
+    
+    % Link the limits so zooming/panning (if enabled) works
+    linkaxes([ax, ax_x], 'x');
+    linkaxes([ax, ax_y], 'y');
+    
+    % Bring main scatter to front to ensure tooltips work
+    uistack(ax, 'top');
 end

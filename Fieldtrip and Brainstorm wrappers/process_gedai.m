@@ -4,11 +4,11 @@ function varargout = process_gedai( varargin )
 % USAGE:                sProcess = process_gedai('GetDescription')
 %                       OutputFiles = process_gedai('Run', sProcess, sInputs)
 
-% [Generalized Eigenvalue De-Artifacting Instrument (GEDAI)]
+% [Generalized Eigenvalue De-Artifacting Instrument (GEDAI) v 1.6]
 % PolyForm Noncommercial License 1.0.0
 % https://polyformproject.org/licenses/noncommercial/1.0.0
 %
-% Copyright (C) [2025] Tomas Ros & Abele Michela
+% Copyright (C) [2026] Tomas Ros & Abele Michela
 %             NeuroTuning Lab [ https://github.com/neurotuning ]
 %             Center for Biomedical Imaging
 %             University of Geneva
@@ -70,9 +70,9 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.visualize_artifacts.Type    = 'checkbox';
     sProcess.options.visualize_artifacts.Value   = 0;
     % === SENSAI visualization
-    sProcess.options.visualize_sensai.Comment = 'SENSAI visualization';
+    sProcess.options.visualize_sensai.Comment = 'SENSAI visualization (Subspace Similarity vs Power dB)';
     sProcess.options.visualize_sensai.Type    = 'checkbox';
-    sProcess.options.visualize_sensai.Value   = 0;
+    sProcess.options.visualize_sensai.Value   = 1;
     % === Save artifacts data
     sProcess.options.save_artifacts.Comment = 'Save artifacts data';
     sProcess.options.save_artifacts.Type    = 'checkbox';
@@ -256,7 +256,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
                 HeadModel    = in_bst_headmodel(HeadModelFile, 0, 'Gain');
                 Gain_filtered = HeadModel.Gain(eeg_meg_idx, :);
                 if strcmp(signal_type, 'eeg')
-                    Gain_avref = Gain_filtered - mean(Gain_filtered, 1);
+                    % Non-rank-deficient average reference (formula: G - sum(G)/(N+1))
+                    Gain_avref = Gain_filtered - sum(Gain_filtered, 1) / (size(Gain_filtered, 1) + 1);
                 else
                     Gain_avref = Gain_filtered;
                 end

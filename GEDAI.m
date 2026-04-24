@@ -222,13 +222,9 @@ else
     % matches the actual number of channels.
     num_chans = length(EEGavRef.chanlocs);
     has_cartesian = length([EEGavRef.chanlocs.X]) == num_chans;
-    has_spherical = length([EEGavRef.chanlocs.sph_theta]) == num_chans;
+    has_spherical = length([EEGavRef.chanlocs.theta]) == num_chans;
     
-    if ~has_cartesian || ~has_spherical
-        error(['CRITICAL: Channel locations are incomplete. ' ...
-               'Ensure all %d channels have X, Y, Z and spherical coordinates.'], num_chans);
-    
-    else
+    if has_cartesian & has_spherical
         % 2. Leadfield Processing
         disp([newline 'GEDAI Leadfield model: BEM interpolated for EEG'])
         L = load('fsavLEADFIELD_4_GEDAI.mat');
@@ -245,8 +241,13 @@ else
         interpolated_EEG = interp_mont_GEDAI(leadfield_EEG, EEGavRef.chanlocs);
         refCOV = interpolated_EEG.data * interpolated_EEG.data';
         
-        end
-    end
+     else
+         error(['CRITICAL: Channel locations are incomplete. ' ...
+               'Ensure all %d channels have X, Y, Z and spherical coordinates.'], num_chans);
+    
+
+     end
+   end
 end
 
 
@@ -677,6 +678,37 @@ if ~isempty(regions)
     else
         EEGartifacts.times = EEGartifacts.xmin*1000;
     end
+    
+    % --- Update event latencies ---
+    % Replicate eeg_eegrej logic: shift events and remove those lying within rejected regions
+    if isfield(EEGclean, 'event') && ~isempty(EEGclean.event) && isfield(EEGclean.event, 'latency')
+        eventLatencies = [EEGclean.event.latency];
+        oriEventLatencies = eventLatencies;
+        rmEvent = [];
+        
+        % Ensure regions are sorted
+        regions_sorted = sortrows(sort(regions, 2));
+        
+        for iReg = 1:size(regions_sorted, 1)
+            % Find events within the current rejected region
+            reject_idx = find(oriEventLatencies >= regions_sorted(iReg,1) & oriEventLatencies <= regions_sorted(iReg,2));
+            rmEvent = [rmEvent reject_idx];
+            
+            % Shift events occurring after the start of this rejected region
+            shift_amount = regions_sorted(iReg,2) - regions_sorted(iReg,1) + 1;
+            idx_to_shift = find(oriEventLatencies > regions_sorted(iReg,1));
+            eventLatencies(idx_to_shift) = eventLatencies(idx_to_shift) - shift_amount;
+        end
+        
+        for iEvent = 1:length(EEGclean.event)
+            EEGclean.event(iEvent).latency = eventLatencies(iEvent);
+        end
+        EEGclean.event(rmEvent) = [];
+    end
+
+    if isfield(EEGartifacts, 'event')
+        EEGartifacts.event = EEGclean.event;
+    end
 end
 
 % Calculate final SENSAI score (after potential epoch rejection)
@@ -768,79 +800,16 @@ else
 end
 
 
-    % --- Manifold Classification (Broadband) BEFORE Cleaning ---
+    % --- Manifold Classification (Broadband) BEFORE & AFTER Cleaning ---
     % Uses 50% overlapping 1-second epochs for denser coverage in the scatter plot
-    if ~isempty(refCOV)
-        %fprintf('\nGenerating SENSAI Plot for Broadband data...\n');
-        
-        % 50% overlapping epoch parameters
-        epoch_samples    = round(EEGavRef.srate * broadband_epoch_size); % 1-second window
-        epoch_step       = floor(epoch_samples / 2);                     % 50% overlap
-        pnts_original    = size(EEGavRef.data, 2);
-        eeg_data_temp    = EEGavRef.data;
-        
-        % Pad so the last window is complete
-        last_start = floor((pnts_original - epoch_samples) / epoch_step) * epoch_step + 1;
-        last_end   = last_start + epoch_samples - 1;
-        if last_end > pnts_original
-            samples_to_pad = last_end - pnts_original;
-            reflection_segment = eeg_data_temp(:, end - samples_to_pad + 1 : end);
-            eeg_data_temp = [eeg_data_temp, fliplr(reflection_segment)];
-        end
-        
-        % Compute starts for all 50%-overlapping windows
-        num_epochs = floor((size(eeg_data_temp, 2) - epoch_samples) / epoch_step) + 1;
-        COV_emp_array_before = cell(num_epochs, 1);
-        for epo = 1:num_epochs
-            i_start = (epo - 1) * epoch_step + 1;
-            i_end   = i_start + epoch_samples - 1;
-            COV_emp_array_before{epo} = cov(eeg_data_temp(:, i_start:i_end)');
-        end
-    end
-
-
-    % --- Manifold Classification (Broadband) AFTER Cleaning ---
-    % Uses the same 50% overlapping 1-second epoch parameters as the BEFORE block
     if visualize_manifold && ~isempty(refCOV)
-        % fprintf('\nGenerating SENSAI Plot for Final Reconstructed Data (Before/After)...\n');
+        % Ensure visualization uses the same PC count as the SENSAI scoring logic
+        if strcmpi(signal_type, 'meg'), vis_pcs = 4; else, vis_pcs = 3; end
         
-        eeg_data_temp      = EEGclean.data;
-        artifact_data_temp = EEGartifacts.data;
+        visualization_metrics = SENSAI_visualization(EEGavRef, EEGclean, EEGartifacts, refCOV, broadband_epoch_size, signal_type, vis_pcs);
         
-        % Pad each signal independently so the last window is complete
-        pnts_clean = size(eeg_data_temp, 2);
-        last_start_clean = floor((pnts_clean - epoch_samples) / epoch_step) * epoch_step + 1;
-        last_end_clean   = last_start_clean + epoch_samples - 1;
-        if last_end_clean > pnts_clean
-            pad_clean = last_end_clean - pnts_clean;
-            eeg_data_temp = [eeg_data_temp, fliplr(eeg_data_temp(:, end - pad_clean + 1 : end))];
-        end
-        
-        pnts_art = size(artifact_data_temp, 2);
-        last_start_art = floor((pnts_art - epoch_samples) / epoch_step) * epoch_step + 1;
-        last_end_art   = last_start_art + epoch_samples - 1;
-        if last_end_art > pnts_art
-            pad_art = last_end_art - pnts_art;
-            artifact_data_temp = [artifact_data_temp, fliplr(artifact_data_temp(:, end - pad_art + 1 : end))];
-        end
-        
-        % 50% overlapping windows – reuse num_epochs from the BEFORE block
-        num_epochs_after = floor((size(eeg_data_temp, 2) - epoch_samples) / epoch_step) + 1;
-        COV_emp_array_after     = cell(num_epochs_after, 1);
-        COV_emp_array_artifacts = cell(num_epochs_after, 1);
-        for epo = 1:num_epochs_after
-            i_start = (epo - 1) * epoch_step + 1;
-            i_end   = i_start + epoch_samples - 1;
-            COV_emp_array_after{epo}     = cov(eeg_data_temp(:, i_start:i_end)');
-            COV_emp_array_artifacts{epo} = cov(artifact_data_temp(:, i_start:i_end)');
-        end
-        
-        % Align BEFORE array to the same epoch count for a fair comparison
-        if num_epochs_after < num_epochs
-            COV_emp_array_before = COV_emp_array_before(1:num_epochs_after);
-        end
-        
-        SENSAI_visualization(refCOV, COV_emp_array_before, COV_emp_array_after, COV_emp_array_artifacts);
+        % Store metrics in EEG.etc.GEDAI
+        EEGclean.etc.GEDAI.visualization_metrics = visualization_metrics;
     end
 
 % Add command history to EEGLAB structure
