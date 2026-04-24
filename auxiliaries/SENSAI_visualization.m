@@ -84,13 +84,19 @@ try
     lda_mdl      = fitcdiscr(X_lda, Y_lda, 'CrossVal', 'on', 'KFold', 5);
     lda_accuracy = (1 - kfoldLoss(lda_mdl)) * 100;
     lda_full     = fitcdiscr(X_lda, Y_lda);
+    
+    % --- Signal Silhouette Score ---
+    % X_lda is [SSI, Power]. Labels are 1 (Signal), 0 (Noise).
+    sil_scores   = silhouette(X_lda, Y_lda, 'sqEuclidean');
+    sil_signal   = mean(sil_scores(Y_lda == 1));
 catch
     lda_accuracy = NaN;
     lda_full     = [];
+    sil_signal   = NaN;
 end
 
 %% ── 4. Plotting ─────────────────────────────────────────────────────────
-figure('Name', 'GEDAI SENSAI Analysis', 'Color', 'w', 'Position', [80 100 1350 580]);
+fig = figure('Name', 'GEDAI SENSAI Analysis', 'Color', 'w', 'Position', [80 100 1350 580], 'Visible', 'off');
 
 col_sig  = [0.08 0.72 0.22];
 col_noise= [0.85 0.13 0.13];
@@ -99,7 +105,7 @@ col_star = [1.00 0.88 0.00];
 
 % --- Panel 1: Before GEDAI ---
 ax1 = subplot(1, 2, 1);
-set(ax1, 'Position', [0.06, 0.12, 0.40, 0.74]); 
+set(ax1, 'Position', [0.06, 0.12, 0.35, 0.74]); 
 hold(ax1, 'on');
 
 [~, si] = sort(ssi_before, 'ascend');
@@ -114,6 +120,7 @@ cb.Label.String = 'SSI composite'; clim(ax1, [0 1]);
 xlabel(ax1, 'Epoch Power (dB)', 'FontSize', 11);
 ylabel(ax1, sprintf('SSI (geom. mean of top-%d PC cosines)', SSI_top_PCs), 'FontSize', 11);
 ylim(ax1, [-0.05 1.15]);
+set(ax1, 'YTickMode', 'auto', 'YTickLabelMode', 'auto', 'TickDir', 'both');
 grid(ax1, 'off');
 text(ax1, ideal_power_target, 1.12, 'Leadfield Subspace Alignment', 'FontSize', 9, 'Color', 0.4*col_star, 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 
@@ -131,6 +138,8 @@ yline(ax2, 1, '--', 'Color', col_star, 'LineWidth', 1.5, 'Alpha', 0.6);
 h_star = scatter(ax2, ideal_power_target, 1, 250, col_star, 'p', 'filled', 'MarkerEdgeColor', 'k');
 
 ylim(ax2, [-0.05 1.15]);
+ylabel(ax2, sprintf('SSI (geom. mean of top-%d PC cosines)', SSI_top_PCs), 'FontSize', 11);
+set(ax2, 'YTickMode', 'auto', 'YTickLabelMode', 'auto', 'TickDir', 'both');
 grid(ax2, 'off');
 
 % ── 5.0 Match X-axis range (power) ──
@@ -163,15 +172,32 @@ legend(ax2, [h_star, h_sig, h_noise], {'Leadfield Subspace', sprintf('Signal (me
 
 sgtitle('SENSAI visualization:  Subspace Similarity  vs  Epoch Power', 'FontSize', 13, 'FontWeight', 'bold');
 
-% ── 6. Add Marginal Densities (Panel 2 Only) ──
-if ~isnan(lda_accuracy)
-    ttl2 = sprintf('After Denoising  |  2D LDA accuracy: %.1f%%\nMean SSSI: %.2f   |   Mean NSSI: %.2f', lda_accuracy, mean(ssi_after), mean(ssi_artifacts));
+% ── 6. Add Marginal Density Distributions ─────────────────────────────────
+% Panel 1 Marginals (Empty data, just for layout/title alignment)
+ttl1 = sprintf('Before Denoising  |  Mean SSI: %.2f', mean(ssi_before));
+add_marginal_densities(ax1, {}, {}, {}, SSI_top_PCs, ttl1);
+
+% Panel 2 Marginals
+if ~isnan(sil_signal)
+    ttl2 = sprintf('After Denoising  |  Signal Silhouette Score: %.2f\nMean SSSI: %.2f   |   Mean NSSI: %.2f', ...
+                  sil_signal, mean(ssi_after), mean(ssi_artifacts));
 else
-    ttl2 = sprintf('After Denoising\nMean SSSI: %.2f   |   Mean NSSI: %.2f', mean(ssi_after), mean(ssi_artifacts));
+    ttl2 = sprintf('After Denoising\nMean SSSI: %.2f   |   Mean NSSI: %.2f', ...
+                  mean(ssi_after), mean(ssi_artifacts));
 end
 add_marginal_densities(ax2, {lpow_after, lpow_artifacts}, {ssi_after, ssi_artifacts}, {col_sig, col_noise}, SSI_top_PCs, ttl2);
 
-metrics = struct('ssi_before_mean', mean(ssi_before), 'ssi_after_mean', mean(ssi_after), 'ssi_artifacts_mean', mean(ssi_artifacts), 'lda_accuracy', lda_accuracy, 'ideal_power_target_db', ideal_power_target);
+metrics = struct('ssi_before_mean', mean(ssi_before), ...
+                 'ssi_after_mean', mean(ssi_after), ...
+                 'ssi_artifacts_mean', mean(ssi_artifacts), ...
+                 'lda_accuracy', lda_accuracy, ...
+                 'signal_silhouette', sil_signal, ...
+                 'ideal_power_target_db', ideal_power_target);
+
+% --- Instant Reveal ---
+set(fig, 'Visible', 'on');
+drawnow;
+
 end
 
 %% Helper Functions
@@ -199,9 +225,15 @@ function draw_ellipse(ax, x, y, col, conf)
 end
 
 function add_marginal_densities(ax, x_data, y_data, cols, SSI_top_PCs, ttl)
-    set(ax, 'Units', 'normalized'); pos = ax.Position; 
-    margin = 0.01; m_size = 0.12;
-    new_w = pos(3) * (1 - m_size - margin); new_h = pos(4) * (1 - m_size - margin);
+    set(ax, 'Units', 'normalized'); 
+    pos = ax.Position; 
+    margin = 0.01; 
+    m_size = 0.12;
+    
+    % Strict manual sizing to ensure perfect symmetry between left and right panels
+    new_w = 0.28; 
+    new_h = 0.65;
+    
     set(ax, 'Position', [pos(1), pos(2), new_w, new_h]);
     ax_x = axes('Position', [pos(1), pos(2) + new_h + margin, new_w, pos(4) * m_size], 'Units', 'normalized', 'Color', 'none', 'XLim', ax.XLim, 'XTick', [], 'YTick', [], 'XAxisLocation', 'bottom', 'Box', 'off');
     hold(ax_x, 'on'); title(ax_x, ttl, 'FontSize', 11);
@@ -211,5 +243,10 @@ function add_marginal_densities(ax, x_data, y_data, cols, SSI_top_PCs, ttl)
         try [f, xi] = ksdensity(x_data{i}); fill(ax_x, xi, f, cols{i}, 'FaceAlpha', 0.2, 'EdgeColor', cols{i}, 'LineWidth', 1); catch, end
         try [f, yi] = ksdensity(y_data{i}); fill(ax_y, f, yi, cols{i}, 'FaceAlpha', 0.2, 'EdgeColor', cols{i}, 'LineWidth', 1); catch, end
     end
-    linkaxes([ax, ax_x], 'x'); linkaxes([ax, ax_y], 'y'); uistack(ax, 'top');
+    linkaxes([ax, ax_x], 'x'); linkaxes([ax, ax_y], 'y');
+    if isempty(x_data) && isempty(y_data)
+        ax_x.XAxis.Visible = 'off'; ax_x.YAxis.Visible = 'off';
+        ax_y.XAxis.Visible = 'off'; ax_y.YAxis.Visible = 'off';
+    end
+    uistack(ax, 'top');
 end
