@@ -96,7 +96,7 @@
 % For any questions, please contact:
 % dr.t.ros@gmail.com
 
-function [EEGclean, EEGartifacts, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com, ENOVA_per_band]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold, signal_type, visualize_manifold)
+function [EEGclean, EEGartifacts, sensai_fig, SENSAI_score, SENSAI_score_per_band, artifact_threshold_per_band, mean_ENOVA, ENOVA_per_epoch, com, ENOVA_per_band]=GEDAI(EEGin, artifact_threshold_type, epoch_size_in_cycles, lowcut_frequency, ref_matrix_type, parallel, visualize_artifacts, ENOVA_threshold, signal_type, visualize_manifold)
 
 if nargin < 2 || isempty(artifact_threshold_type)
     artifact_threshold_type = 'auto';
@@ -123,7 +123,7 @@ if nargin < 9 || isempty(signal_type)
     signal_type = 'eeg';
 end
 if nargin < 10 || isempty(visualize_manifold)
-    visualize_manifold = false;
+    visualize_manifold = true;
 end
 % Validate signal_type
 if ~ismember(lower(signal_type), {'eeg', 'meg'})
@@ -184,6 +184,51 @@ if ~ischar(ref_matrix_type)
  
 else
     switch ref_matrix_type
+        % IMK added - Load a matching custom refCOV for a ppt EEG file
+        case 'custom'
+        
+        % Specify directory where refCOV matrices are stored
+        disp([newline 'Using custom covariance matrix. Loading refCOV from file.']);
+        refCOV_dir = '/athena/grosenicklab/scratch/imk2003/eeg_sources_data/GEDAI_refCOV';
+        if ~isfolder(refCOV_dir)
+            error('Please specify a valid custom refCOV directory. Invalid input: "%s"', refCOV_dir);
+        end
+        
+        % Identify and extract an ID common to the .set file being processed and its corresponding refCOV,
+        % e.g. a participant ID, here assumed to be the first part of the filename.
+        [~, file_to_clean, ~] = fileparts(EEGin.filename);
+        file_parts = strsplit(file_to_clean, '_');
+        file_id = file_parts{1};
+        
+        % Find the matching participant-specific refCOV and load. refCOV should be in .mat format.
+        dirList = dir(fullfile(refCOV_dir, '*.mat'));
+        matchIdx = find(startsWith({dirList.name}, file_id));
+
+        % There should probably be only one unique refCOV per participant.
+        if isempty(matchIdx)
+            error('No matching file found in %s for %s', refCOV_dir, EEGin.filename);
+        elseif length(matchIdx) > 1
+            error('Multiple matching files found in %s for %s', refCOV_dir, EEGin.filename);
+        end
+        
+        % Define the path to this participant's refCOV within the refCOV_dir
+        refCOV_path = fullfile(refCOV_dir, dirList(matchIdx).name);
+        fprintf('refCOV_path: %s', refCOV_path);
+        
+        for i = 1:length(dirList)
+            fprintf('  %s\n', dirList(i).name);
+        end
+        fprintf('Looking for file_id: %s\n', file_id);
+
+        % Load custom participant-specific refCOV
+        disp(['Loading custom ppt refCOV from: ' refCOV_path]);
+        data = load(refCOV_path);
+        if ~isfield(data, 'refCOV')
+            error('Loaded file %s does not contain a variable named "refCOV".', refCOV_path);
+        end
+        refCOV = data.refCOV;
+
+                
         case 'precomputed'
         disp([newline 'GEDAI Leadfield model: BEM precomputed for EEG'])
             L=load('fsavLEADFIELD_4_GEDAI.mat');
@@ -802,11 +847,12 @@ end
 
     % --- Manifold Classification (Broadband) BEFORE & AFTER Cleaning ---
     % Uses 50% overlapping 1-second epochs for denser coverage in the scatter plot
+    sensai_fig = [];  % default if visualization is skipped
     if visualize_manifold && ~isempty(refCOV)
         % Ensure visualization uses the same PC count as the SENSAI scoring logic
         if strcmpi(signal_type, 'meg'), vis_pcs = 4; else, vis_pcs = 3; end
         
-        visualization_metrics = SENSAI_visualization(EEGavRef, EEGclean, EEGartifacts, refCOV, broadband_epoch_size, signal_type, vis_pcs);
+        [visualization_metrics, sensai_fig] = SENSAI_visualization(EEGavRef, EEGclean, EEGartifacts, refCOV, broadband_epoch_size, signal_type, vis_pcs);
         
         % Store metrics in EEG.etc.GEDAI
         EEGclean.etc.GEDAI.visualization_metrics = visualization_metrics;

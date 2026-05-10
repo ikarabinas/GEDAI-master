@@ -1,4 +1,4 @@
-function metrics = SENSAI_visualization(EEGavRef, EEGclean, EEGartifacts, ref_cov, epoch_duration_sec, signal_type, SSI_top_PCs)
+function [metrics, fig] = SENSAI_visualization(EEGavRef, EEGclean, EEGartifacts, ref_cov, epoch_duration_sec, signal_type, SSI_top_PCs)
 % SENSAI_VISUALIZATION  2D SENSAI scatter: subspace similarity vs epoch power
 %
 % Inputs:
@@ -197,9 +197,9 @@ metrics = struct('ssi_before_mean', mean(ssi_before), ...
                  'signal_silhouette', sil_signal, ...
                  'ideal_power_target_db', ideal_power_target);
 
-% --- Instant Reveal ---
-set(fig, 'Visible', 'on');
-drawnow;
+% --- Instant Reveal if set to 'on'
+set(fig, 'Visible', 'off');
+%drawnow;
 
 end
 
