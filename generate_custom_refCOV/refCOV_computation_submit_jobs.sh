@@ -7,14 +7,14 @@ source ~/.bashrc
 mamba activate mne_offscreen
 
 # Specify paths to: 
-# 1. A csv listing ppt IDs and corresponding info needed for file identification and forward modeling (e.g. tms_target, head_circumference)
+# 1. A csv listing ppt IDs and corresponding info needed for file identification and forward modeling (e.g. group tms_target, head_circumference)
 # 2. The path to the client script for running refCOV computation ('client_generate_refCOV.py')
 # 3. The path to a save folder
 # 4. The directory for log saving
 # 5. The path to a job tracking file ('refCOV_job_tracking.tsv')
 
-SUBJECT_LIST="/home/imk2003/Documents/updated_subject_list_dlpfc.csv"
-COMPUTE_REFCOV_SCRIPT="/home/imk2003/Documents/MATLAB/eeglab/plugins/GEDAI-MASTER/generate_participant_refCOV/client_generate_refCOV.py"
+SUBJECT_LIST="/home/imk2003/Documents/updated_subject_list_rofc.csv"
+COMPUTE_REFCOV_SCRIPT="/home/imk2003/Documents/MATLAB/eeglab/plugins/GEDAI-master/generate_custom_refCOV/client_generate_refCOV.py"
 SAVEPATH="/athena/grosenicklab/scratch/imk2003/eeg_sources_data/"
 LOG_DIR="/athena/grosenicklab/scratch/imk2003/eeg_sources_data/generate_refCOV_logs/"
 TRACKING_FILE="refCOV_job_tracking.tsv"
@@ -26,7 +26,8 @@ DRY_RUN=false
 mkdir -p "$LOG_DIR"
 echo -e "subject_id\tjob_id\ttimestamp" > "$TRACKING_FILE"
 
-# Read subject ID, TMS target, and head circumference info from csv
+# Read subject ID, group tms_target, and head circumference info from csv
+# Match the csvcut command numbers to column numbers for specified variables.
 csvcut -c 2,5,7,8 "$SUBJECT_LIST" | tail -n +2 | while IFS=',' read -r subject_id tms_target diagnosis head_circumference; do
     subject_id=$(echo "$subject_id" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     tms_target=$(echo "$tms_target" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -35,7 +36,7 @@ csvcut -c 2,5,7,8 "$SUBJECT_LIST" | tail -n +2 | while IFS=',' read -r subject_i
     
     # Skip entries with blank record_id, tms_target, or head circumference
     if [ -z "$subject_id" ] || [ -z "$tms_target" ] || [ -z "$head_circumference" ] || [ -z "$diagnosis" ]; then
-        echo "Skipping ${subject_id}. Missing tms target, diagnosis, or head circumference info."
+        echo "Skipping ${subject_id}. Missing key info for this participant in the provided csv."
         continue
     fi
 
@@ -49,8 +50,7 @@ csvcut -c 2,5,7,8 "$SUBJECT_LIST" | tail -n +2 | while IFS=',' read -r subject_i
     fi
 
 
-    # Build SLURM command. Allocate at least 32G of memory and 2 CPU cores per subject.
-    # 16-20G for creating refCOV
+    # Build SLURM command. Allocate 16-20G for creating refCOV
     SLURM_CMD="sbatch --mem=16G --cpus-per-task=2 \
         --job-name=stc_${subject_id} \
         --partition=sackler-cpu,scu-cpu \
