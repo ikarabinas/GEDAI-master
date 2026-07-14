@@ -189,7 +189,7 @@ else
         
         % Specify directory where refCOV matrices are stored
         disp([newline 'Using custom covariance matrix. Loading refCOV from file.']);
-        refCOV_dir = '/athena/grosenicklab/scratch/imk2003/eeg_sources_data/GEDAI_refCOV';
+        refCOV_dir = '/athena/grosenicklab/scratch/imk2003/eeg_sources_data/GEDAI_refCOV_256';
         if ~isfolder(refCOV_dir)
             error('Please specify a valid custom refCOV directory. Invalid input: "%s"', refCOV_dir);
         end
@@ -213,12 +213,6 @@ else
         
         % Define the path to this participant's refCOV within the refCOV_dir
         refCOV_path = fullfile(refCOV_dir, dirList(matchIdx).name);
-        fprintf('refCOV_path: %s', refCOV_path);
-        
-        for i = 1:length(dirList)
-            fprintf('  %s\n', dirList(i).name);
-        end
-        fprintf('Looking for file_id: %s\n', file_id);
 
         % Load custom participant-specific refCOV
         disp(['Loading custom ppt refCOV from: ' refCOV_path]);

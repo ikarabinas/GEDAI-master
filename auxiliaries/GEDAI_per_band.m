@@ -73,6 +73,11 @@ for epo=1:N_epochs-1
     COV_2(:,:,epo) = cov(EEGdata_epoched_2(:,:,epo)');
 end
 COV(:,:,N_epochs) = cov(EEGdata_epoched(:,:,N_epochs)');
+
+%%
+fprintf('refCOV size: %s\n', mat2str(size(refCOV)));
+fprintf('N_EEG_electrodes: %d\n', N_EEG_electrodes);
+
 %% Generalized Eigendecomposition (GEVD)
 regularization_lambda = 0.05;
 reg_val = trace(refCOV) / N_EEG_electrodes;

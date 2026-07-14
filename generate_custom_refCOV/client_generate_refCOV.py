@@ -40,6 +40,12 @@ mri_id = subjects_df.loc[ppt_id, 'mri_id']
 def raw_reststate_data_finder(ppt_id, tms_target, diagnosis, eeg_datapath=store_eeg_datapath):
     reststate_filepaths = []
     tms_target = tms_target.lower()
+
+    # One participant's TANS target was more LPFC than DLPFC
+    # Rename here just for file finding (stored with DLPFC files)
+    if tms_target == 'lpfc':
+        tms_target = 'dlpfc'
+        
     diagnosis = diagnosis.lower()
     data_folder = f'{diagnosis}_{tms_target}'
     datapath = os.path.join(eeg_datapath, data_folder)
@@ -87,12 +93,12 @@ def run_refCOV(ppt_id, eeg_filepath):
         print(f'Running refCOV generation for {filename}')
         
         # Create directory for saving papermill notebook metadata
-        os.makedirs('refCOV_plots', exist_ok=True)
+        os.makedirs('refCOV_plots_256', exist_ok=True)
         
         # Execute notebook via papermill for interactive plotting with the 'notebook' backend
         pm.execute_notebook(
             plotting_notebook,
-            f'refCOV_plots/{ppt_id}_{tms_target}_generate_refCOV.ipynb',  # Save executed version
+            f'refCOV_plots_256/{ppt_id}_{tms_target}_generate_refCOV.ipynb',  # Save executed version
             parameters=dict(
                 ppt_id=ppt_id,
                 subject=mri_id,

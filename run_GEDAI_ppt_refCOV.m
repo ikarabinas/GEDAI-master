@@ -2,7 +2,7 @@
 % individual participant leadfield-derived refCOV, and run script to run GEDAI on file
 
 datadir = '/athena/grosenicklab/scratch/imk2003/acc_tmseeg/eeg_data/RELAX_GEDAI/RELAX_twICA_GEDAI-dlpfc/';
-refCOV_path = '/athena/grosenicklab/scratch/imk2003/eeg_sources_data/GEDAI_refCOV';
+refCOV_path = '/athena/grosenicklab/scratch/imk2003/eeg_sources_data/GEDAI_refCOV_256';
 
 %% Load data files needed for plotting
 % Get list of all cleaned files

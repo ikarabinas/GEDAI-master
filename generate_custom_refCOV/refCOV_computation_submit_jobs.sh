@@ -13,7 +13,7 @@ mamba activate mne_offscreen
 # 4. The directory for log saving
 # 5. The path to a job tracking file ('refCOV_job_tracking.tsv')
 
-SUBJECT_LIST="/home/imk2003/Documents/updated_subject_list_rofc.csv"
+SUBJECT_LIST="/home/imk2003/Documents/updated_subject_list_ofc.csv"
 COMPUTE_REFCOV_SCRIPT="/home/imk2003/Documents/MATLAB/eeglab/plugins/GEDAI-master/generate_custom_refCOV/client_generate_refCOV.py"
 SAVEPATH="/athena/grosenicklab/scratch/imk2003/eeg_sources_data/"
 LOG_DIR="/athena/grosenicklab/scratch/imk2003/eeg_sources_data/generate_refCOV_logs/"
@@ -44,7 +44,7 @@ csvcut -c 2,5,7,8 "$SUBJECT_LIST" | tail -n +2 | while IFS=',' read -r subject_i
     tms_target="${tms_target,,}"  
 
     # Skip subjects with an existing refCOV file in savepath
-    if compgen -G "${SAVEPATH}/GEDAI_refCOV/${subject_id}*refCOV.mat" > /dev/null; then
+    if compgen -G "${SAVEPATH}/GEDAI_refCOV_256/${subject_id}*refCOV.mat" > /dev/null; then
         echo "Skipping ${subject_id}_${tms_target}. refCOV file already exists."
         continue
     fi
@@ -52,7 +52,7 @@ csvcut -c 2,5,7,8 "$SUBJECT_LIST" | tail -n +2 | while IFS=',' read -r subject_i
 
     # Build SLURM command. Allocate 16-20G for creating refCOV
     SLURM_CMD="sbatch --mem=16G --cpus-per-task=2 \
-        --job-name=stc_${subject_id} \
+        --job-name=refCOV_${subject_id} \
         --partition=sackler-cpu,scu-cpu \
         --time=3:00:00 \
         --output=${LOG_DIR}/${subject_id}_${tms_target}_%j.out \
